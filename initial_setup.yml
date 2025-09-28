@@ -1,0 +1,7 @@
+- name: Setup readline-multi-user demonstrations
+  hosts: all
+  become: true
+
+  roles:
+    - demonstrations
+

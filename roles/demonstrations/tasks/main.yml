@@ -1,0 +1,32 @@
+- name: Configure demonstration_functions
+  ansible.builtin.copy:
+    src: demonstration_functions.sh
+    dest: /etc/profile.d/demonstration_functions.sh
+    mode: '664'
+    owner: root
+    group: wheel
+
+- name: Ensure /etc/demonstrations exists
+  ansible.builtin.file:
+    path: /etc/demonstrations
+    state: directory
+    mode: '775'
+    owner: root
+    group: wheel
+
+- name: Ensure /etc/demonstrations/config exists
+  ansible.builtin.copy:
+    src: config
+    dest: /etc/demonstrations/config
+    mode: '664'
+    owner: root
+    group: wheel
+
+- name: Ensure /opt/demonstrations exists
+  ansible.builtin.file:
+    path: /opt/demonstrations
+    state: directory
+    mode: '775'
+    owner: root
+    group: wheel
+
