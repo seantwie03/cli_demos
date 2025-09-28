@@ -4,7 +4,7 @@ Many of us in the IT industry have probably had professors that type very slow. 
 
 First create a "command file" with all the commands that will be ran during the demonstration. During the demo, use a custom keyboard shortcut to read the command file and put the next command on the prompt as if I typed it by hand. Then explain the command to the audience and hit Enter to execute it. Repeat until the demonstration is complete.
 
-## How the `main` Branch Works
+## How It Works
 
 This project utilizes [Kitty's remote control](https://sw.kovidgoyal.net/kitty/overview/#remote-control) capability to make command line demonstrations effortless. It accomplishes this by allowing a presenter to send pre-written commands from a "Controller" Kitty window to a "Presentation" Kitty window.
 
