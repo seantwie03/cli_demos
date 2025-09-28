@@ -26,6 +26,8 @@ To see a sped up demonstration using this tool check my [Asciinema profile](http
 4. Start the demonstration by pressing `kitty_mod+p` (e.g., `Cmd+p` on macOS or `Ctrl+Shift+p` on Linux) in any Kitty window. Your current window will become the "Controller" window where private presenter notes will appear. A new "Presentation" window will appear. This is where your demo takes place. You can `ssh` to a remote host from this window, if needed.
 5. Run the Demonstration by pressing `F1` to process the next line from your command file. This will either display a header or place the next command on the prompt in the Presentation window. The terminal remains fully interactive for any ad-hoc commands.
 
+If you don't want to use the Kitty terminal, checkout the [other implementations](#other-implementations) that have more limitations, but their only requirement is Bash.
+
 ## Mechanism
 
 This implementation utilizes [Kitty's remote control](https://sw.kovidgoyal.net/kitty/overview/#remote-control) capability to orchestrate the demonstration across multiple windows.
