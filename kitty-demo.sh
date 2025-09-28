@@ -1,6 +1,6 @@
 #!/bin/bash
 
-CMD_FILE="./sample_command_file.sh"
+CMD_FILE="${CMD_FILE:-./sample_command_file.sh}"
 if [ ! -f "$CMD_FILE" ]; then
   echo "Error: Command file not found at: $CMD_FILE" >&2
   # Keep the window open for a bit so the user can see the error.
