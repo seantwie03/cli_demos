@@ -1,8 +1,8 @@
 # Command Line Demonstrations with Kitty
 
-Many of us in the IT industry have probably had professors that type very slow. You feel like you might fall asleep watching them type. Or worse, professors that make a lot of typos. That can really throw off a demonstration as the professor has to go into troubleshooting mode to figure out why their command didn't work. This project was created to avoid all these problems.
+Many of us in the IT industry have probably had professors that type very slow. You feel like you might fall asleep watching them type. Or worse, professors that make a lot of typos. Those can really throw off a demonstration as the professor has to go into troubleshooting mode to figure out why their command didn't work. This project was created to avoid all these problems.
 
-First create a "command file" with all the commands that will be ran during the demonstration. During the demo, use a custom keyboard shortcut to read the command file and put the next command on the prompt as if I typed it by hand. Then explain the command to the audience and hit Enter to execute it. Repeat until the demonstration is complete.
+First create a "command file" with all the commands that will be ran during the demonstration. During the demo, use a custom keyboard shortcut to read the command file and put the next command on the prompt as if it was typed in by hand. Explain the command to the audience and hit Enter to execute it. Repeat until the demonstration is complete.
 
 ## How It Works
 
