@@ -58,12 +58,6 @@ The command file is a simple text file where each line is processed one by one. 
 
 **Example**: [sample_command_file.sh](./sample_command_file.sh)
 
-## Files
-
-*   `kitty-demo.sh`: The main controller script.
-*   `sample_command_file.sh`: An example command file.
-*   `README.md`: This file.
-
 ## Thanks
 
 Thanks to [Kovid Goyal](https://sw.kovidgoyal.net/kitty/support/) for making such an awesome terminal program!
