@@ -1,40 +1,37 @@
 # Kitty Demo Controller
 
-This project provides a script to control a Kitty terminal for giving step-by-step command-line demonstrations. It allows a presenter to send pre-written commands from a controller window to a dedicated presentation window.
+This project utilizes [Kitty](https://sw.kovidgoyal.net/kitty/)'s remote control capability to make command line demonstrations effortless. It accomplishes this by allowing a presenter to send pre-written commands from a "Controller" Kitty window to a "Presentation" Kitty window.
 
 ## How It Works
 
-The system uses Kitty's remote control capabilities (`kitty @`) and two custom keybindings to orchestrate the demo:
+The system uses a "command file" and two custom Kitty keybinds to orchestrate the demonstration.
 
-1.  **Launch**: Pressing a keyboard shortcut launches a new, dedicated "Controller" window, which immediately starts the `kitty-demo.sh` script.
-2.  **Presentation Window**: The script instantly spawns a second, clean "Presentation" window. This window has a large font and margins, making it easy for an audience to read.
-3.  **Step-by-Step Execution**: The script reads commands from `sample_command_file.sh`. Each time you press `F1`, the next command or header is processed.
-4.  **Headers**: Header lines (starting with `#^`) are displayed as large, formatted blocks in the "Presentation" window.
-5.  **Commands**: Command lines are typed into the prompt of the "Presentation" window, ready for you to execute.
-6.  **Presenter Notes**: Note lines (starting with `#!`) are displayed only in the "Controller" window, visible only to you.
+The command file is a essentially a list of shell commands that will be ran as part of the demo. You can optionally include Sections, Presenter Notes, and additional comments.
 
-## Setup
+The first Kitty keybinding launches the script. You press this in the window you want your Presenter notes to show in.
 
-1.  **Edit `kitty.conf`**: Add the following two key mappings to your `kitty.conf` file. You must use the **absolute path** to the `kitty-demo.sh` script.
+```~/.config/kitty/kitty.conf
+# Launches the Controller window and starts the demo script
+map kitty_mod+n launch --cwd=current --title=Controller sh /path/to/your/kitty-demo/kitty-demo.sh
+```
 
-    ```
-    # Launches the Controller window and starts the demo script
-    map kitty_mod+n launch --cwd=current --title=Controller sh /path/to/your/kitty-demo/kitty-demo.sh
+The second Kitty keybinding sends the Enter key to the window running the script. This prompts the script to send the next line of output to the Presentation window. You press this from the Presentation window to advance the demonstration.
 
-    # Sends the "next command" signal (Enter) to the Controller window
-    map f1 remote_control send-key --match 'title:Controller' enter
-    ```
+```~/.config/kitty/kitty.conf
+# Sends the "next command" signal (Enter) to the Controller window
+map f1 remote_control send-key --match 'title:Controller' enter
+```
 
-2.  **Prepare Your Commands**: Edit the `sample_command_file.sh` file to include the commands and notes for your demonstration. See the "Command File Syntax" section below.
+Add these keybindings to your [Kitty config](https://sw.kovidgoyal.net/kitty/conf/).
 
 ## How to Use
 
-1.  From any Kitty window, press `kitty_mod+n` (e.g., `Cmd+n` on macOS or `Ctrl+Shift+n` on Linux) to start the demo.
-2.  Two new windows will appear: "Controller" and "Presentation". You can arrange these on your screens as needed.
+1.  From any Kitty window, press `kitty_mod+n` (e.g., `Cmd+n` on macOS or `Ctrl+Shift+n` on Linux) to start the demo. Your current window will become the "Controller" window.
+2.  A new window will appear. This is the "Presentation" window.
 3.  Press `F1` to process the first line of your `sample_command_file.sh`.
-    - To use a different command file, modify the CMD_FILE variable at the top
+    - This will put the command on your prompt. You can then explain the command to your audience and hit [Enter] to execute it.
+    - To use a different command file, modify the `CMD_FILE` variable at the top of `kitty-demo.sh`.
 4.  Continue pressing `F1` to send the next header or command.
-5.  To **execute** a command that has been typed into the "Presentation" window, you must click on that window and press `Enter` manually.
 
 ## Command File Syntax
 
@@ -60,3 +57,7 @@ The command file is a simple text file where each line is processed one by one.
 *   `kitty-demo.sh`: The main controller script.
 *   `sample_command_file.sh`: An example command file.
 *   `README.md`: This file.
+
+## Thanks
+
+Thanks to [Kovid Goyal](https://sw.kovidgoyal.net/kitty/support/) for making such an awesome terminal program!
