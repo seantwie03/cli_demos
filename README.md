@@ -1,4 +1,4 @@
-# Command Line Demonstrations with Kitty
+# Command Line Demonstrations in Bash
 
 Many of us in the IT industry have probably had professors that type very, very slowly. Or worse, professors that make a lot of typos. Those can really throw off a demonstration as the professor has to go into troubleshooting mode to figure out why their command didn't work. This project was created to avoid all these problems.
 
