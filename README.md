@@ -6,7 +6,7 @@ Simply create a "command file" with all the commands that will be ran during the
 
 [![asciicast](https://asciinema.org/a/706500.svg)](https://asciinema.org/a/706500)
 
-To see a sped up demonstration using this tool check my [Asciinema profile](https://asciinema.org/~sean-twie03)
+To see a sped up demonstration using this tool check my [Asciinema profile](https://asciinema.org/~sean-twie03).
 
 ## Setup and Usage
 
