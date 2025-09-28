@@ -30,14 +30,13 @@ To see a sped up demonstration using this tool check my [Asciinema profile](http
 
 This implementation utilizes [Kitty's remote control](https://sw.kovidgoyal.net/kitty/overview/#remote-control) capability to orchestrate the demonstration across multiple windows.
 
-* Two-Window Model*: The system uses two Kitty windows:
-    * The Controller* window runs the main kitty-demo.sh script, which reads the command file and displays private presenter notes.
-    * The Presentation* window is where the audience sees the action. The script sends commands and headers to this window.
+* The system uses two Kitty windows:
+    * The Controller window runs the main `kitty-demo.sh` script, which reads the command file and displays private presenter notes.
+    * The Presentation window is where the audience sees the action. The script sends commands and headers to this window.
 
-* Orchestration: The kitty-demo.sh script acts as the central controller. It waits for input and uses `kitty @ send-text` to 
-write commands to the Presentation window's prompt.
+* The kitty-demo.sh script acts as the central controller. It waits for input and uses `kitty @ send-text` to write commands to the Presentation window's prompt.
 
-Advancement Trigger: The F1 keybinding simply sends an enter keypress to the Controller window. The read command inside the `kitty-demo.sh` script receives this keypress, which triggers it to process and send the next line from the command file.
+* The F1 keybinding simply sends an enter keypress to the Controller window. The read command inside the `kitty-demo.sh` script receives this keypress, which triggers it to process and send the next line from the command file.
 
 ## Command File Syntax
 The command file is a simple text file where each line is processed one by one. At the top of [kitty-demo.sh](./kitty-demo.sh) is a `CMD_FILE` variable. Modify this variable if you want to specify a different command file.
