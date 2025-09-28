@@ -95,7 +95,7 @@ This implementation does not work when escalating to `root` or switching users. 
 
 Similar to `readline` but accessible to every user on the system. The keyboard shorcut will continue to work when escalating to `root` or switching users.
 
-Does not work in Text User Interfaces (TUIs) like `vim` or `parted`.
+Does not work in TUIs like `vim` or `parted`.
 
 ### Main
 
@@ -105,5 +105,5 @@ Does not work in Text User Interfaces (TUIs) like `vim` or `parted`.
 
 #### Details
 
-A more complicated solution that utilizes Kitty's remote control capability. This implementation allows usage of the presenter notes. It works when escalating to `root` and switching users. It also works in TUIs like `vim` and `parted`. Requires the [Kitty](https://sw.kovidgoyal.net/kitty/) Terminal which only runs on Mac and Linux (or WSLg).
+A more complicated solution that utilizes Kitty's remote control capability. This implementation allows usage of the presenter notes. It works when escalating to `root` and switching users. It also works in TUIs like `vim` and `parted`. Requires the [Kitty](https://sw.kovidgoyal.net/kitty/) Terminal which only runs on Mac, Linux, and [WSLg](https://learn.microsoft.com/en-us/windows/wsl/tutorials/gui-apps).
 
