@@ -12,23 +12,20 @@ To see a sped up demonstration using this tool check my [Asciinema profile](http
 
 1. Configure Kitty keybindings. Add the following maps to your `kitty.conf`.
     ```kitty.conf
-    # Starts the demo script in a new "Controller" window - must be an absolute path
+    # Starts the demo script in the current window. Becomes the "Controller" window.
     map kitty_mod+p launch --cwd=current --title=Controller sh /path/to/kitty-demo.sh
 
     # Advances the demo by sending an 'enter' keypress to the Controller
     map f1 remote_control send-key --match 'title:Controller' enter
     ```
 2. Write a [command file](#command-file-syntax) with all the commands that will be ran during the demo.
-3. Set the command file. Specify your command file by settng the `CMD_FILE` environment variable or updating the variable at the top of the [kitty-demo.sh](./kitty-demo.sh) script.
+3. Specify your command file by settng the `CMD_FILE` environment variable or updating the variable at the top of the [kitty-demo.sh](./kitty-demo.sh) script.
     ```sh
     export CMD_FILE=/path/to/your/command/file.sh
     ```
-4. Start the demonstration.
-    * From any Kitty window, press `kitty_mod+p` (e.g., `Cmd+p` on macOS or `Ctrl+Shift+p` on Linux) to start the demo. Your current window will become the "Controller" window where private presneter notes will appear.
+4. Start the demonstration by pressing `kitty_mod+p` (e.g., `Cmd+p` on macOS or `Ctrl+Shift+p` on Linux) in any Kitty window. Your current window will become the "Controller" window where private presneter notes will appear.
     * A new "Presentation" window will appear. This is where your demo takes place. This is where the section headers, comments, and commands will be sent. You can `ssh` to a remote host from this window, if needed.
-5. Run the Demonstration:
-    * Press `F1` to process the next line from your command file. This will either display a header or place the next command on the prompt in the Presentation window.
-    * The terminal remains fully interactive for any ad-hoc commands.
+5. Run the Demonstration by pressing `F1` to process the next line from your command file. This will either display a header or place the next command on the prompt in the Presentation window. The terminal remains fully interactive for any ad-hoc commands.
 
 ## Mechanism
 
