@@ -12,14 +12,14 @@ The system uses a "command file" and two custom Kitty keybinds to orchestrate th
 
 The [command file](#command-file-syntax) is a list of shell commands that will be ran as part of the demo. You can optionally include section headers, descriptive comments, and presenter notes.
 
-The first Kitty keybinding launches the script. You press this in the window you want your presenter notes to show in.
+The first Kitty keybinding launches the script. The window you are in when you press this keybinding is where the presenter notes will show.
 
 ```~/.config/kitty/kitty.conf
 # Launches the Controller window and starts the demo script
-map kitty_mod+n launch --cwd=current --title=Controller sh /path/to/your/kitty-demo/kitty-demo.sh
+map kitty_mod+p launch --cwd=current --title=Controller sh /path/to/your/kitty-demo/kitty-demo.sh
 ```
 
-The second Kitty keybinding sends the `enter` key to the window running the script. This prompts the script to send the next line of output to the Presentation window. You press this from the Presentation window to advance the demonstration.
+The second Kitty keybinding sends the `enter` key to the window running the script. This prompts the script to send the next line of output to the Presentation window. Press this keybinding from any window to advance the presentation.
 
 ```~/.config/kitty/kitty.conf
 # Sends the "next command" signal (enter) to the Controller window
@@ -30,7 +30,7 @@ Add these keybindings to your [Kitty config](https://sw.kovidgoyal.net/kitty/con
 
 ## How to Use
 
-1.  From any Kitty window, press `kitty_mod+n` (e.g., `Cmd+n` on macOS or `Ctrl+Shift+n` on Linux) to start the demo. Your current window will become the "Controller" window.
+1.  From any Kitty window, press `kitty_mod+p` (e.g., `Cmd+p` on macOS or `Ctrl+Shift+p` on Linux) to start the demo. Your current window will become the "Controller" window.
 2.  A new "Presentation" window will appear. This is where the section headers, comments, and commands will be sent.
     - If your demonstration will take place on a remote server, you can `ssh` into that server in the Presentation window. This can be accomplished by typing the `ssh` command by hand or having it as the first line in your command file.
 3.  Press `F1` to process the first line of your `sample_command_file.sh`.
