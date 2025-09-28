@@ -4,44 +4,6 @@ Many of us in the IT industry have probably had professors that type very slow. 
 
 First create a "command file" with all the commands that will be ran during the demonstration. During the demo, use a custom keyboard shortcut to read the command file and put the next command on the prompt as if I typed it by hand. Then explain the command to the audience and hit Enter to execute it. Repeat until the demonstration is complete.
 
-## Implementations
-
-This repo has three branches. Each branch uses different technology to accomplish the stated goal above.
-
-### Readline
-
-**Branch**: `readline`
-
-**Complexity**: Low
-
-#### Details
-
-Uses Bash functions to manipulte `readline`. Very simple implementation.
-
-This implementation does not work when escalating to `root` or switching users. Does not work in Text User Interfaces (TUIs) like `vim` or `parted`.
-
-### Readline Multi-User
-
-**Branch**: `readline-multi-user`
-
-**Complexity**: Moderate
-
-#### Details
-
-Similar to `readline` but accessible to every user on the system. The keyboard shorcut will continue to work when escalating to `root` or switching users.
-
-Does not work in Text User Interfaces (TUIs) like `vim` or `parted`.
-
-### Main
-
-**Branch**: [main](https://github.com/seantwie03/cli_demos)
-
-**Complexity**: High
-
-#### Details
-
-A more complicated solution that utilizes Kitty's remote control capability. This implementation allows usage of "Speaker Notes." It works when escalating to `root` and switching users. It also works in TUIs like `vim` and `parted`. Requires the [Kitty](https://sw.kovidgoyal.net/kitty/) Terminal which only runs on Mac and Linux (or WSLg).
-
 ## How the `main` Branch Works
 
 This project utilizes [Kitty's remote control](https://sw.kovidgoyal.net/kitty/overview/#remote-control) capability to make command line demonstrations effortless. It accomplishes this by allowing a presenter to send pre-written commands from a "Controller" Kitty window to a "Presentation" Kitty window.
@@ -103,3 +65,42 @@ The command file is a simple text file where each line is processed one by one.
 ## Thanks
 
 Thanks to [Kovid Goyal](https://sw.kovidgoyal.net/kitty/support/) for making such an awesome terminal program!
+
+## Other Implementations
+
+This repo has three branches. Each branch uses different technology to accomplish the stated goal above.
+
+### Readline
+
+**Branch**: `readline`
+
+**Complexity**: Low
+
+#### Details
+
+Uses Bash functions to manipulte `readline`. Very simple implementation.
+
+This implementation does not work when escalating to `root` or switching users. Does not work in Text User Interfaces (TUIs) like `vim` or `parted`.
+
+### Readline Multi-User
+
+**Branch**: `readline-multi-user`
+
+**Complexity**: Moderate
+
+#### Details
+
+Similar to `readline` but accessible to every user on the system. The keyboard shorcut will continue to work when escalating to `root` or switching users.
+
+Does not work in Text User Interfaces (TUIs) like `vim` or `parted`.
+
+### Main
+
+**Branch**: [main](https://github.com/seantwie03/cli_demos)
+
+**Complexity**: High
+
+#### Details
+
+A more complicated solution that utilizes Kitty's remote control capability. This implementation allows usage of "Speaker Notes." It works when escalating to `root` and switching users. It also works in TUIs like `vim` and `parted`. Requires the [Kitty](https://sw.kovidgoyal.net/kitty/) Terminal which only runs on Mac and Linux (or WSLg).
+
