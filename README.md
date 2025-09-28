@@ -70,7 +70,7 @@ This repo has three branches. Each branch uses different technology to accomplis
 
 ### Readline
 
-**Branch**: `readline`
+**Branch**: [readline](https://github.com/seantwie03/cli_demos/tree/readline?tab=readme-ov-file)
 
 **Complexity**: Low
 
