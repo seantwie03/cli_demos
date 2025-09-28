@@ -14,13 +14,11 @@ This repo has three branches. Each branch uses different technology to accomplis
 
 **Complexity**: Low
 
-#### Pros
+#### Details
 
-Very simple. Single file. Only requires Bash.
+Uses Bash functions to manipulte `readline`. Very simple implementation.
 
-#### Cons
-
-Does not work when escalating to `root` or switching users. Does not work in Text User Interfaces (TUIs) like `vim` or `parted`.
+This implementation does not work when escalating to `root` or switching users. Does not work in Text User Interfaces (TUIs) like `vim` or `parted`.
 
 ### Readline Multi-User
 
@@ -28,32 +26,25 @@ Does not work when escalating to `root` or switching users. Does not work in Tex
 
 **Complexity**: Moderate
 
-#### Pros
+#### Details
 
-Multiple files. Still only requires Bash.
-
-#### Cons
+Similar to `readline` but accessible to every user on the system. The keyboard shorcut will continue to work when escalating to `root` or switching users.
 
 Does not work in Text User Interfaces (TUIs) like `vim` or `parted`.
 
 ### Main
 
-**Branch**: `main`
+**Branch**: [main](https://github.com/seantwie03/cli_demos)
 
 **Complexity**: High
 
-#### Pros
+#### Details
 
-Allows escalating to `root` and switching users. Works in Text User Interfaces (TUIs) like `vim` or `parted`.
-
-#### Cons
-
-Requires Kitty Terminal
-
+A more complicated solution that utilizes Kitty's remote control capability. This implementation allows usage of "Speaker Notes." It works when escalating to `root` and switching users. It also works in TUIs like `vim` and `parted`. Requires the [Kitty](https://sw.kovidgoyal.net/kitty/) Terminal which only runs on Mac and Linux (or WSLg).
 
 ## How the `main` Branch Works
 
-This project utilizes [Kitty](https://sw.kovidgoyal.net/kitty/)'s remote control capability to make command line demonstrations effortless. It accomplishes this by allowing a presenter to send pre-written commands from a "Controller" Kitty window to a "Presentation" Kitty window.
+This project utilizes [Kitty's remote control](https://sw.kovidgoyal.net/kitty/overview/#remote-control) capability to make command line demonstrations effortless. It accomplishes this by allowing a presenter to send pre-written commands from a "Controller" Kitty window to a "Presentation" Kitty window.
 
 The system uses a "command file" and two custom Kitty keybinds to orchestrate the demonstration.
 
