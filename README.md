@@ -1,10 +1,12 @@
 # Command Line Demonstrations with Kitty
 
-Many of us in the IT industry have probably had professors that type very, very slowly. So slowly that you feel like you might fall asleep watching them type. Or worse, professors that make a lot of typos. Those can really throw off a demonstration as the professor has to go into troubleshooting mode to figure out why their command didn't work. This project was created to avoid all these problems.
+Many of us in the IT industry have probably had professors that type very, very slowly. Or worse, professors that make a lot of typos. Those can really throw off a demonstration as the professor has to go into troubleshooting mode to figure out why their command didn't work. This project was created to avoid all these problems.
 
-First create a "command file" with all the commands that will be ran during the demonstration. During the demo, use a custom keyboard shortcut to read the command file and put the next command on the prompt as if it was typed in by hand. Explain the command to the audience and hit `enter` to execute it. Repeat until the demonstration is complete.
+Simply create a "command file" with all the commands that will be ran during the demonstration. During the demo, use a custom keyboard shortcut to read the command file and put the next command on the prompt as if it was typed in by hand. Explain the command to the audience and hit `enter` to execute it. Repeat until the demonstration is complete.
 
-To see a sped up version of a demonstration using this tool check my [Asciinema profile](https://asciinema.org/~sean-twie03)
+[![asciicast](https://asciinema.org/a/706500.svg)](https://asciinema.org/a/706500)
+
+To see a sped up demonstration using this tool check my [Asciinema profile](https://asciinema.org/~sean-twie03)
 
 ## Setup and Usage
 
@@ -13,7 +15,7 @@ To see a sped up version of a demonstration using this tool check my [Asciinema 
     ```sh
     source /path/to/demonstration_functions.sh
     ```
-3. Set the `CMD_FILE` environement varaible to the absolute path of your command file:
+3. Set the `CMD_FILE` environment varaible to the absolute path of your command file:
     ```sh
     export CMD_FILE=/path/to/your/command/file.sh
     ```
@@ -35,7 +37,8 @@ To see more complex impelentations that do not have these weaknesses check the [
 This script uses `bind -x` command to map key sequences to Bash functions. These functions manipulate the [READLINE_LINE](https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html#index-READLINE_005fLINE) and [READLINE_POINT](https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html#index-READLINE_005fPOINT) variables to programmatically populate the command prompt.
 
 ## Command File Syntax
-The command file is a simple text file where each line is processed one by one. At the top of [demonstration_functions.sh](./demonstration_functions.sh) is a `CMD_FILE` variable. Modify this variable if you want to specify a different command file.
+
+The script uses the CMD_FILE environment variable to find your command file. While you can set a default path inside demonstration_functions.sh, it is recommended to set it using export as shown in the setup instructions.
 
 * **Headers**: Lines starting with `#^` are treated as section headers. The script will display them in a formatted block in the presentation terminal. Any subsequent lines starting with a plain `#` are considered part of that header.
     ```
