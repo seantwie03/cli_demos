@@ -18,8 +18,8 @@ This implementation is designed to be deployed system-wide, making it available 
     ```
     The playbook places files in the following locations:
     *   `/etc/profile.d/demonstration_functions.sh`: Sourced on login for all users.
-    *   `/etc/demonstrations/config`: Main configuration file.
-    *   `/opt/demonstrations/sample_command_file.sh`: The example command file.
+    *   `/etc/demonstrations/config`: Main configuration file where the command file location is specified.
+    *   `/opt/demonstrations/sample_command_file.sh`: The command file.
 
 2.  **Log Out and Log In**: For the system-wide profile changes in `/etc/profile.d/` to take effect, you must log out and log back in.
 
@@ -29,7 +29,7 @@ This implementation is designed to be deployed system-wide, making it available 
     CMD_FILE="/opt/demonstrations/sample_command_file.sh"
     ```
 
-4.  **Control the Demonstration**: Use the standard keybindings, which now work for any user on the system:
+4.  **Control the Demonstration**: Use the following keybindings to control the demonstration:
     *   `Ctrl-x n` (`next_cmd`): Places the next command or displays the next header.
     *   `Ctrl-x p` (`prev_cmd`): Moves back to the previous command.
     *   `Ctrl-x r` (`reset_cmd`): Resets the demonstration to the beginning of the file.
@@ -44,7 +44,7 @@ This script's functionality is built on several core components to allow for sys
 
 *   **File-Based State Management**: To persist the demonstration's state across different user sessions (e.g., when using `su` or `sudo`), the script stores the current line number in a world-writable file in `/tmp`. The state file's name is derived from the command file's name (e.g., `/tmp/sample_command_file_state`). Because the state is in a globally accessible file, any user's shell can read and modify it.
 
-*   **Bash Keybindings & Readline**: The script uses `bind -x` to map key sequences (`Ctrl-x n`, etc.) to Bash functions. These functions manipulate the `READLINE_LINE` and `READLINE_POINT` variables to programmatically write commands into the user's prompt.
+*   **Bash Keybindings & Readline**: The script uses `bind -x` to map key sequences (`Ctrl-x n`, etc.) to Bash functions. These functions manipulate the [READLINE_LINE](https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html#index-READLINE_005fLINE) and [READLINE_POINT](https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html#index-READLINE_005fPOINT) variables to programmatically write commands into the user's prompt.
 
 ## Limitations
 
