@@ -1,4 +1,4 @@
-# Kitty Demo Controller
+# Command Line Demonstrations Using the Kitty Terminal
 
 This project utilizes [Kitty](https://sw.kovidgoyal.net/kitty/)'s remote control capability to make command line demonstrations effortless. It accomplishes this by allowing a presenter to send pre-written commands from a "Controller" Kitty window to a "Presentation" Kitty window.
 
