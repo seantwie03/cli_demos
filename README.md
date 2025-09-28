@@ -62,7 +62,7 @@ The script uses the CMD_FILE environment variable to find your command file. Whi
     echo "Hello, World!"
     ```
 
-**Example**: [sample_command_file.sh](./sample_command_file.sh)
+**Example**: [sample_command_file.sh](./roles/demonstrations/files/sample_command_file.sh)
 
 ## Other Implementations
 

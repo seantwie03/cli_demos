@@ -30,3 +30,10 @@
     owner: root
     group: wheel
 
+- name: Ensure /etc/demonstrations/config exists
+  ansible.builtin.copy:
+    src: sample_command_file.sh
+    dest: /opt/demonstrations/sample_command_file.sh
+    mode: '664'
+    owner: root
+    group: wheel
