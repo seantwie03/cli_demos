@@ -10,40 +10,47 @@ To see a sped up demonstration using this tool check my [Asciinema profile](http
 
 ## Setup and Usage
 
-1. Write a [command file](#command-file-syntax) with all the commands that will be ran during the demo.
-2. Source the `demonstration_function.sh` script:
-    ```sh
-    source /path/to/demonstration_functions.sh
-    ```
-3. Set the `CMD_FILE` environment varaible to the absolute path of your command file:
-    ```sh
-    export CMD_FILE=/path/to/your/command/file.sh
-    ```
-4. Use the following keybinding to control the demonstration:
-    * `Ctrl-x n` (`next_cmd`): Places the next command or displays the next header.
-    * `Ctrl-x p` (`prev_cmd`): Moves back to the previous command.
-    * `Ctrl-x r` (`reset_cmd`): Resets the demonstration to the beginning of the file.
+This implementation is designed to be deployed system-wide, making it available to all users. An Ansible playbook is provided to automate the installation.
 
-All of the functions and environment variables that make this work is in [demonstration_functions.sh](./demonstration_functions.sh).
+1.  **Run the Ansible Playbook**: Execute the `initial_setup.yml` playbook to deploy the necessary files.
+    ```sh
+    ansible-playbook initial_setup.yml
+    ```
+    The playbook places files in the following locations:
+    *   `/etc/profile.d/demonstration_functions.sh`: Sourced on login for all users.
+    *   `/etc/demonstrations/config`: Main configuration file.
+    *   `/opt/demonstrations/sample_command_file.sh`: The example command file.
+
+2.  **Log Out and Log In**: For the system-wide profile changes in `/etc/profile.d/` to take effect, you must log out and log back in.
+
+3.  **Set Command File**: To use a command file, edit `/etc/demonstrations/config` and set the `CMD_FILE` variable to the absolute path of your file. For example:
+    ```ini
+    # /etc/demonstrations/config
+    CMD_FILE="/opt/demonstrations/sample_command_file.sh"
+    ```
+
+4.  **Control the Demonstration**: Use the standard keybindings, which now work for any user on the system:
+    *   `Ctrl-x n` (`next_cmd`): Places the next command or displays the next header.
+    *   `Ctrl-x p` (`prev_cmd`): Moves back to the previous command.
+    *   `Ctrl-x r` (`reset_cmd`): Resets the demonstration to the beginning of the file.
 
 ## Mechanism
 
-The script's functionality is built on three core components:
+This script's functionality is built on several core components to allow for system-wide, multi-user demonstrations.
 
-* **Bash Keybindings**: The `bind -x` command maps key sequences (`Ctrl-x n`, etc.) to custom Bash functions.
-* **Readline Variables**: The functions manipulate the [READLINE_LINE](https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html#index-READLINE_005fLINE) and [READLINE_POINT](https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html#index-READLINE_005fPOINT) variables to programmatically write commands into the user's prompt.
-* **State Variables**: The script tracks its state using shell variables in the current shell:
-    * `CMD_FILE`: Stores the path to your command file.
-    * `NEXT_CMD_INDEX`: An index that tracks the next line to be read from the command file.
-    * `CURRENT_LINE`: Holds the content of the command that was most recently read.
+*   **System-Wide Script**: The main script is located at `/etc/profile.d/demonstration_functions.sh`, ensuring it is automatically sourced by all user shells upon login.
+
+*   **Centralized Configuration**: The path to the active command file is read from `/etc/demonstrations/config`. The `next_cmd` function sources this file each time it is run to know which command file to use.
+
+*   **File-Based State Management**: To persist the demonstration's state across different user sessions (e.g., when using `su` or `sudo`), the script stores the current line number in a world-writable file in `/tmp`. The state file's name is derived from the command file's name (e.g., `/tmp/sample_command_file_state`). Because the state is in a globally accessible file, any user's shell can read and modify it.
+
+*   **Bash Keybindings & Readline**: The script uses `bind -x` to map key sequences (`Ctrl-x n`, etc.) to Bash functions. These functions manipulate the `READLINE_LINE` and `READLINE_POINT` variables to programmatically write commands into the user's prompt.
 
 ## Limitations
 
-The simplicity of this implementation leads to two main limitations:
+While this implementation is robust enough to handle multiple users and privilege escalation, it has one main limitation inherent to its design:
 
-*   **User Switching**: The script's state (the command file path and current line number) is stored in shell variables. If you escalate privileges (e.g., with `sudo -s` or `su`), you start a new shell session. This new session does not inherit the variables from the original shell, so the keybindings will no longer know which file to read or which line to be on.
-
-*   **Text User Interfaces (TUIs)**: The keybindings are configured within Bash. When you run a TUI like `vim` or `parted`, that application takes full control of keyboard input. It interprets key presses for its own purposes, so the `Ctrl-x n` sequence is never passed back to the parent Bash shell to be processed. You must exit the TUI to resume using the demonstration keybindings.
+*   **Text User Interfaces (TUIs)**: The keybindings (`Ctrl-x n`, etc.) are configured within Bash. When you run a full-screen Text User Interface like `vim` or `parted`, that application takes full control of keyboard input. It interprets all key presses for its own purposes, so the keybindings are never passed back to the parent Bash shell to be processed. You must exit the TUI to resume using the demonstration keybindings.
 
 To see more complex implementations with fewer limitations check the [other branches in this repo](#other-implementations).
 
