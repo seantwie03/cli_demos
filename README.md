@@ -26,15 +26,28 @@ To see a sped up demonstration using this tool check my [Asciinema profile](http
 
 All of the functions and environment variables that make this work is in [demonstration_functions.sh](./demonstration_functions.sh).
 
-## Limitations
-
-This implementation very simple; just a few lines of Bash code with no dependencies. This simplicity limits the capabilities. This implementation does not support escalating to `root` or switching users. Nor does it support Text User Interfaces (TUIs) like `vim` or `parted`. If a command in the command file does either of these, you'll have to type that section of the demonstartion manually. After you exit back to the primary demonstration shell (quitting vim for example), you can resume using the `next_cmd` keybinding. 
-
-To see more complex impelentations that do not have these weaknesses check the [other branches in this repo](#other-implementations).
-
 ## Mechanism
 
-This script uses `bind -x` command to map key sequences to Bash functions. These functions manipulate the [READLINE_LINE](https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html#index-READLINE_005fLINE) and [READLINE_POINT](https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html#index-READLINE_005fPOINT) variables to programmatically populate the command prompt.
+The script's functionality is built on three core components:
+
+*   **Bash Keybindings**: The `bind -x` command maps key sequences (`Ctrl-x n`, etc.) to custom Bash functions.
+*   **Readline Variables**: The functions manipulate the [READLINE_LINE](https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html#index-READLINE_005fLINE) and [READLINE_POINT](https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html#index-READLINE_005fPOINT) variables to programmatically write commands into the user's prompt.
+*   **State Variables**: The script tracks its state using shell variables:
+    *   `CMD_FILE`: Stores the path to your command file.
+    *   `NEXT_CMD_INDEX`: An index that tracks the next line to be read from the command file.
+    *   `CURRENT_LINE`: Holds the content of the command that was most recently read.
+
+These variables are stored within the current shell session.
+
+## Limitations
+
+The simplicity of this implementation leads to two main limitations:
+
+*   **User Switching**: The script's state (the command file path and current line number) is stored in shell variables. If you escalate privileges (e.g., with `sudo -s` or `su`), you start a new shell session. This new session does not inherit the variables from the original shell, so the keybindings will no longer know which file to read or which line to be on.
+
+*   **Text User Interfaces (TUIs)**: The keybindings are configured within Bash. When you run a TUI like `vim` or `parted`, that application takes full control of keyboard input. It interprets key presses for its own purposes, so the `Ctrl-x n` sequence is never passed back to the parent Bash shell to be processed. You must exit the TUI to resume using the demonstration keybindings.
+
+To see more complex implementations that do not have these weaknesses check the [other branches in this repo](#other-implementations).
 
 ## Command File Syntax
 
