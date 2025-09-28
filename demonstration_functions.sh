@@ -1,3 +1,4 @@
+# Put the full path to your command file here
 export CMD_FILE=./sample_command_file.sh
 export CURRENT_LINE=
 export NEXT_CMD_INDEX=1

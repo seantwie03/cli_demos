@@ -10,9 +10,6 @@ ls
 #^ 2. Inspect a different directory
 ls /etc/
 clear
-cd /etc/
-ls
-clear
 
 #^ 3. Test TUIs like vim
 # You will have to manually type inside vim. After you exit vim you can use the keybindings again
