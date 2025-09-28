@@ -107,8 +107,3 @@ Does not work in Text User Interfaces (TUIs) like `vim` or `parted`.
 
 A more complicated solution that utilizes Kitty's remote control capability. This implementation allows usage of the presenter notes. It works when escalating to `root` and switching users. It also works in TUIs like `vim` and `parted`. Requires the [Kitty](https://sw.kovidgoyal.net/kitty/) Terminal which only runs on Mac and Linux (or WSLg).
 
-
-## TODO
-
-- Utilize [Kitty's Text Sizing Protocol](https://sw.kovidgoyal.net/kitty/text-sizing-protocol/) for section headers? May not play nice with Asciinema.
-- Colorful section headers and comments?
