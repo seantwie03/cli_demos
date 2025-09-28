@@ -8,45 +8,45 @@ First create a "command file" with all the commands that will be ran during the 
 
 This repo has three branches. Each branch uses different technology to accomplish the stated goal above.
 
-## Readline
+### Readline
 
 **Branch**: `readline`
 
 **Complexity**: Low
 
-### Pros
+#### Pros
 
 Very simple. Single file. Only requires Bash.
 
-### Cons
+#### Cons
 
 Does not work when escalating to `root` or switching users. Does not work in Text User Interfaces (TUIs) like `vim` or `parted`.
 
-## Readline Multi-User
+### Readline Multi-User
 
 **Branch**: `readline-multi-user`
 
 **Complexity**: Moderate
 
-### Pros
+#### Pros
 
 Multiple files. Still only requires Bash.
 
-### Cons
+#### Cons
 
 Does not work in Text User Interfaces (TUIs) like `vim` or `parted`.
 
-## Main
+### Main
 
 **Branch**: `main`
 
 **Complexity**: High
 
-### Pros
+#### Pros
 
 Allows escalating to `root` and switching users. Works in Text User Interfaces (TUIs) like `vim` or `parted`.
 
-### Cons
+#### Cons
 
 Requires Kitty Terminal
 
