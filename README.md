@@ -23,9 +23,7 @@ To see a sped up demonstration using this tool check my [Asciinema profile](http
     ```sh
     export CMD_FILE=/path/to/your/command/file.sh
     ```
-4. Start the demonstration by pressing `kitty_mod+p` (e.g., `Cmd+p` on macOS or `Ctrl+Shift+p` on Linux) in any Kitty window. Your current window will become the "Controller" window where private presenter notes will appear.
-
-  A new "Presentation" window will appear. This is where your demo takes place. This is where the section headers, comments, and commands will be sent. You can `ssh` to a remote host from this window, if needed.
+4. Start the demonstration by pressing `kitty_mod+p` (e.g., `Cmd+p` on macOS or `Ctrl+Shift+p` on Linux) in any Kitty window. Your current window will become the "Controller" window where private presenter notes will appear. A new "Presentation" window will appear. This is where your demo takes place. This is where the section headers, comments, and commands will be sent. You can `ssh` to a remote host from this window, if needed.
 5. Run the Demonstration by pressing `F1` to process the next line from your command file. This will either display a header or place the next command on the prompt in the Presentation window. The terminal remains fully interactive for any ad-hoc commands.
 
 ## Mechanism
