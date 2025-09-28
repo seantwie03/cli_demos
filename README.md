@@ -8,40 +8,40 @@ Simply create a "command file" with all the commands that will be ran during the
 
 To see a sped up demonstration using this tool check my [Asciinema profile](https://asciinema.org/~sean-twie03).
 
-## How It Works
+## Setup and Usage
 
-This project utilizes [Kitty's remote control](https://sw.kovidgoyal.net/kitty/overview/#remote-control) capability to make command line demonstrations effortless. It accomplishes this by allowing a presenter to send pre-written commands from a "Controller" Kitty window to a "Presentation" Kitty window.
+1. Configure Kitty keybindings. Add the following maps to your `kitty.conf`.
+    ```kitty.conf
+    # Starts the demo script in a new "Controller" window - must be an absolute path
+    map kitty_mod+p launch --cwd=current --title=Controller sh /path/to/kitty-demo.sh
 
-The system uses a "command file" and two custom Kitty keybinds to orchestrate the demonstration.
+    # Advances the demo by sending an 'enter' keypress to the Controller
+    map f1 remote_control send-key --match 'title:Controller' enter
+    ```
+2. Write a [command file](#command-file-syntax) with all the commands that will be ran during the demo.
+3. Set the command file. Specify your command file by settng the `CMD_FILE` environment variable or updating the variable at the top of the [kitty-demo.sh](./kitty-demo.sh) script.
+    ```sh
+    export CMD_FILE=/path/to/your/command/file.sh
+    ```
+4. Start the demonstration.
+    * From any Kitty window, press `kitty_mod+p` (e.g., `Cmd+p` on macOS or `Ctrl+Shift+p` on Linux) to start the demo. Your current window will become the "Controller" window where private presneter notes will appear.
+    * A new "Presentation" window will appear. This is where your demo takes place. This is where the section headers, comments, and commands will be sent. You can `ssh` to a remote host from this window, if needed.
+5. Run the Demonstration:
+    * Press `F1` to process the next line from your command file. This will either display a header or place the next command on the prompt in the Presentation window.
+    * The terminal remains fully interactive for any ad-hoc commands.
 
-The [command file](#command-file-syntax) is a list of shell commands that will be ran as part of the demo. You can optionally include section headers, descriptive comments, and presenter notes.
+## Mechanism
 
-The first Kitty keybinding launches the script. The window you are in when you press this keybinding is where the presenter notes will show.
+This implementation utilizes [Kitty's remote control](https://sw.kovidgoyal.net/kitty/overview/#remote-control) capability to orchestrate the demonstration across multiple windows.
 
-```~/.config/kitty/kitty.conf
-# Launches the Controller window and starts the demo script
-map kitty_mod+p launch --cwd=current --title=Controller sh /path/to/your/kitty-demo/kitty-demo.sh
-```
+* Two-Window Model*: The system uses two Kitty windows:
+    * The Controller* window runs the main kitty-demo.sh script, which reads the command file and displays private presenter notes.
+    * The Presentation* window is where the audience sees the action. The script sends commands and headers to this window.
 
-The second Kitty keybinding sends the `enter` key to the window running the script. This prompts the script to send the next line of output to the Presentation window. Press this keybinding from any window to advance the presentation.
+* Orchestration: The kitty-demo.sh script acts as the central controller. It waits for input and uses `kitty @ send-text` to 
+write commands to the Presentation window's prompt.
 
-```~/.config/kitty/kitty.conf
-# Sends the "next command" signal (enter) to the Controller window
-map f1 remote_control send-key --match 'title:Controller' enter
-```
-
-Add these keybindings to your [Kitty config](https://sw.kovidgoyal.net/kitty/conf/).
-
-## How to Use
-
-1.  From any Kitty window, press `kitty_mod+p` (e.g., `Cmd+p` on macOS or `Ctrl+Shift+p` on Linux) to start the demo. Your current window will become the "Controller" window.
-2.  A new "Presentation" window will appear. This is where the section headers, comments, and commands will be sent.
-    - If your demonstration will take place on a remote server, you can `ssh` into that server in the Presentation window. This can be accomplished by typing the `ssh` command by hand or having it as the first line in your command file.
-3.  Press `F1` to process the first line of your `sample_command_file.sh`.
-    - This will print the first section header or put the first command on your prompt. Explain the command to your audience and hit `enter` to execute it.
-    - If your audience asks a question, the terminal is available to type any additional "adhoc" commands as needed.
-    - To use a different command file, modify the `CMD_FILE` variable at the top of `kitty-demo.sh`.
-4.  Continue pressing `F1` to send the remaining lines from the command file.
+Advancement Trigger: The F1 keybinding simply sends an enter keypress to the Controller window. The read command inside the `kitty-demo.sh` script receives this keypress, which triggers it to process and send the next line from the command file.
 
 ## Command File Syntax
 The command file is a simple text file where each line is processed one by one. At the top of [kitty-demo.sh](./kitty-demo.sh) is a `CMD_FILE` variable. Modify this variable if you want to specify a different command file.
