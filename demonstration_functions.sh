@@ -1,4 +1,4 @@
-export CMD_FILE=/path/to/command/file.sh
+export CMD_FILE=./sample_command_file.sh
 export CURRENT_LINE=
 export NEXT_CMD_INDEX=1
 
@@ -18,6 +18,15 @@ function __print_next_cmd() {
     while [[ "$CURRENT_LINE" == \#^* ]]; do
         echo -e "\n########################################################################################################################"
         echo "    ${CURRENT_LINE#\#^}"
+        while true; do
+            local peek_line_content=$(sed -n $((NEXT_CMD_INDEX + 1))p "$CMD_FILE")
+            if [[ "$peek_line_content" == \#* ]] && [[ "$peek_line_content" != \#^* ]]; then
+                echo "    ${peek_line_content#\#}"
+                ((NEXT_CMD_INDEX++))
+            else
+                break
+            fi
+        done
         echo -e "########################################################################################################################\n"
         ((NEXT_CMD_INDEX++))
         __find_next_cmd
