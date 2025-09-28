@@ -6,50 +6,53 @@ First create a "command file" with all the commands that will be ran during the 
 
 ## How It Works
 
-This project utilizes [Kitty's remote control](https://sw.kovidgoyal.net/kitty/overview/#remote-control) capability to make command line demonstrations effortless. It accomplishes this by allowing a presenter to send pre-written commands from a "Controller" Kitty window to a "Presentation" Kitty window.
+This project manipulates Bash's [READLINE_LINE](https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html#index-READLINE_005fLINE) and [READLINE_POINT](https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html#index-READLINE_005fPOINT) variables using `bind -x` keybindings.
 
-The system uses a "command file" and two custom Kitty keybinds to orchestrate the demonstration.
+The system uses a "command file" and three Bash keybindings to orchestrate the demonstration.
 
-The [command file](#command-file-syntax) is a list of shell commands that will be ran as part of the demo. You can optionally include section headers, descriptive comments, and presenter notes.
+The [command file](#command-file-syntax) is a list of shell commands that will be ran as part of the demo. You can optionally include section headers and descriptive comments.
 
-The first Kitty keybinding launches the script. The window you are in when you press this keybinding is where the presenter notes will show.
+1. The first keybinding is for the `next_cmd` function. Pressing this keybinding puts the next line from the command file on your prompt. If the next line is a section header, it echoes it instead.
 
-```~/.config/kitty/kitty.conf
-# Launches the Controller window and starts the demo script
-map kitty_mod+p launch --cwd=current --title=Controller sh /path/to/your/kitty-demo/kitty-demo.sh
+```sh
+bind -x '"\C-xn": next_cmd'
 ```
 
-The second Kitty keybinding sends the `enter` key to the window running the script. This prompts the script to send the next line of output to the Presentation window. Press this keybinding from any window to advance the presentation.
+2. The second keybinding is for the `prev_cmd` function. If you need to go back to a previous line, you can use this keybinding.
 
-```~/.config/kitty/kitty.conf
-# Sends the "next command" signal (enter) to the Controller window
-map f1 remote_control send-key --match 'title:Controller' enter
+```sh
+bind -x '"\C-xp": prev_cmd'
 ```
 
-Add these keybindings to your [Kitty config](https://sw.kovidgoyal.net/kitty/conf/).
+3. The third keybinding is the `reset_cmd` function. Use this keybinding in between demonstrations to reset back to line one.
+
+```sh
+bind -x '"\C-xr": reset_cmd'
+```
+
+All of the functions and environment variables that make this work is in [demonstration_functions.sh](./demonstration_functions.sh).
+
+## Limitations
+
+This implementation very simple; just a few lines of Bash code with no dependencies. This simplicity limits the capabilities. This implementation does not support escalating to `root` or switching users. Nor does it support Text User Interfaces (TUIs) like `vim` or `parted`. If a command in the command file does either of these, you'll have to type that section of the demonstartion manually. After you exit back to the primary demonstration shell (quitting vim for example), you can resume using the `next_cmd` keybinding. 
+
+To see more complex impelentations that do not have these weaknesses check the [other branches in this repo](#other-implementations).
 
 ## How to Use
 
-1.  From any Kitty window, press `kitty_mod+p` (e.g., `Cmd+p` on macOS or `Ctrl+Shift+p` on Linux) to start the demo. Your current window will become the "Controller" window.
-2.  A new "Presentation" window will appear. This is where the section headers, comments, and commands will be sent.
-    - If your demonstration will take place on a remote server, you can `ssh` into that server in the Presentation window. This can be accomplished by typing the `ssh` command by hand or having it as the first line in your command file.
-3.  Press `F1` to process the first line of your `sample_command_file.sh`.
-    - This will print the first section header or put the first command on your prompt. Explain the command to your audience and hit `enter` to execute it.
-    - If your audience asks a question, the terminal is available to type any additional "adhoc" commands as needed.
-    - To use a different command file, modify the `CMD_FILE` variable at the top of `kitty-demo.sh`.
-4.  Continue pressing `F1` to send the remaining lines from the command file.
+1. Download the `demonstration_functions.sh` file to a location that is readable by whichever user will be used to do the demonstration. (Escalating to `root` or switching users is not supported.)
+1. Source the `demonstration_functions.sh` script manually or in your `.bashrc`.
+1. Set the `CMD_FILE` variable to the full path of your command file. This can be done by editing the `CMD_FILE` variable in demonstration_functions.sh script or by running a command like `export CMD_FILE=/path/to/command/file.sh`.
+1. Press the `<C-x>n` (Hold `Control`, Press `x`, Release `Control`, Press `n`). The first section header will appear in your terminal or the first command will appear on your prompt.
+1. Continue pressing `<C-x>n` to send the remaining lines from the command file.
 
 ## Command File Syntax
-The command file is a simple text file where each line is processed one by one. At the top of [kitty-demo.sh](./kitty-demo.sh) is a `CMD_FILE` variable. Modify this variable if you want to specify a different command file.
+The command file is a simple text file where each line is processed one by one. At the top of [demonstration_functions.sh](./demonstration_functions.sh) is a `CMD_FILE` variable. Modify this variable if you want to specify a different command file.
 
 *   **Headers**: Lines starting with `#^` are treated as section headers. The script will display them in a formatted block in the presentation terminal. Any subsequent lines starting with a plain `#` are considered part of that header.
     ```
     #^ This is a header
     # This is part of a more detailed description
-    ```
-*   **Presenter Notes**: Lines starting with `#!` are presenter notes. They are echoed only in the "Controller" window for you to see.
-    ```
-    #! Give the audience a pnumonic for each command, flag and argument!
     ```
 *   **Commands**: Any other line is treated as a shell command to be typed into the prompt of the "Presentation" window.
     ```
@@ -61,13 +64,9 @@ The command file is a simple text file where each line is processed one by one. 
 
 ## Files
 
-*   `kitty-demo.sh`: The main controller script.
+*   `demonstration_functions.sh`: The file to import into your bashrc.
 *   `sample_command_file.sh`: An example command file.
 *   `README.md`: This file.
-
-## Thanks
-
-Thanks to [Kovid Goyal](https://sw.kovidgoyal.net/kitty/support/) for making such an awesome terminal program!
 
 ## Other Implementations
 
@@ -75,7 +74,7 @@ This repo has three branches. Each branch uses different technology to accomplis
 
 ### Readline
 
-**Branch**: `readline`
+**Branch**: [readline](https://github.com/seantwie03/cli_demos/tree/readline?tab=readme-ov-file)
 
 **Complexity**: Low
 
