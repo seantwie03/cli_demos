@@ -82,7 +82,7 @@ This implementation does not work when escalating to `root` or switching users. 
 
 ### Readline Multi-User
 
-**Branch**: `readline-multi-user`
+**Branch**: [readline-multi-user](https://github.com/seantwie03/cli_demos/tree/readline-multi-user?tab=readme-ov-file)
 
 **Complexity**: Moderate
 
