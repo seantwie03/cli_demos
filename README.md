@@ -10,21 +10,22 @@ To see a sped up demonstration using this tool check my [Asciinema profile](http
 
 ## Setup and Usage
 
-1. Configure Kitty keybindings. Add the following maps to your `kitty.conf`.
+1. Download the [kitty-demo.sh](./kitty-demo.sh) script.
+2. Add the following maps to your `kitty.conf`.
     ```kitty.conf
     # Starts the demo script in the current window. Becomes the "Controller" window.
+    # Also launches the Presentation window
     map kitty_mod+p launch --cwd=current --title=Controller sh /path/to/kitty-demo.sh
 
-    # Advances the demo by sending an 'enter' keypress to the Controller
+    # Advances the demo by sending an 'enter' keypress to the Controller which triggers
+    # the script running inside the controller window to send the next line from 
+    # the CMD_FILE to the Presentation window
     map f1 remote_control send-key --match 'title:Controller' enter
     ```
-2. Write a [command file](#command-file-syntax) with all the commands that will be ran during the demo.
-3. Specify your command file by settng the `CMD_FILE` environment variable or updating the variable at the top of the [kitty-demo.sh](./kitty-demo.sh) script.
-    ```sh
-    export CMD_FILE=/path/to/your/command/file.sh
-    ```
-4. Start the demonstration by pressing `kitty_mod+p` (e.g., `Cmd+p` on macOS or `Ctrl+Shift+p` on Linux) in any Kitty window. Your current window will become the "Controller" window where private presenter notes will appear. A new "Presentation" window will appear. This is where your demo takes place. You can `ssh` to a remote host from this window, if needed.
-5. Run the Demonstration by pressing `F1` to process the next line from your command file. This will either display a header or place the next command on the prompt in the Presentation window. The terminal remains fully interactive for any ad-hoc commands.
+3. Write a [command file](#command-file-syntax) with all the commands that will be ran during the demo.
+4. Specify your command file by updating the `CMD_FILE` variable at the top of the [kitty-demo.sh](./kitty-demo.sh) script.
+5. Start the demonstration by pressing `kitty_mod+p` (e.g., `Cmd+p` on macOS or `Ctrl+Shift+p` on Linux) in any Kitty window. This will create a "Controller" window where private presenter notes will appear. A new "Presentation" window will also appear. This is where your demo takes place. You can `ssh` to a remote host from this window, if needed.
+6. Run the Demonstration by pressing `F1` to process the next line from your command file. This will either display a header or place the next command on the prompt in the Presentation window. The terminal remains fully interactive for any ad-hoc commands.
 
 If you don't want to use the Kitty terminal, checkout the [other implementations](#other-implementations) that have more limitations, but their only requirement is Bash.
 
@@ -43,16 +44,16 @@ This implementation utilizes [Kitty's remote control](https://sw.kovidgoyal.net/
 ## Command File Syntax
 The command file is a simple text file where each line is processed one by one. At the top of [kitty-demo.sh](./kitty-demo.sh) is a `CMD_FILE` variable. Modify this variable if you want to specify a different command file.
 
-*   **Headers**: Lines starting with `#^` are treated as section headers. The script will display them in a formatted block in the presentation terminal. Any subsequent lines starting with a plain `#` are considered part of that header.
+* **Headers**: Lines starting with `#^` are treated as section headers. The script will display them in a formatted block in the presentation terminal. Any subsequent lines starting with a plain `#` are considered part of that header.
     ```
     #^ This is a header
     # This is part of a more detailed description
     ```
-*   **Presenter Notes**: Lines starting with `#!` are presenter notes. They are echoed only in the "Controller" window for you to see.
+* **Presenter Notes**: Lines starting with `#!` are presenter notes. They are echoed only in the "Controller" window for you to see.
     ```
     #! Give the audience a pnumonic for each command, flag and argument!
     ```
-*   **Commands**: Any other line is treated as a shell command to be typed into the prompt of the "Presentation" window.
+* **Commands**: Any other line is treated as a shell command to be typed into the prompt of the "Presentation" window.
     ```
     ls -l
     echo "Hello, World!"
