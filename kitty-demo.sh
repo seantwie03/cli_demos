@@ -1,6 +1,7 @@
 #!/bin/bash
 
-CMD_FILE="${CMD_FILE:-./sample_command_file.sh}"
+CMD_FILE="./sample_command_file.sh"
+
 if [ ! -f "$CMD_FILE" ]; then
   echo "Error: Command file not found at: $CMD_FILE" >&2
   # Keep the window open for a bit so the user can see the error.
@@ -29,6 +30,7 @@ print_line_and_wrap() {
 # --- Main Script Logic ---
 
 echo "Starting Kitty Demo Controller..."
+echo "Command file: $CMD_FILE"
 
 # I want section headers to be big and colorful. I want them to appear in the
 # terminal without having to echo them. When doing that, the echo command I
@@ -137,11 +139,10 @@ while (( i < ${#lines[@]} )); do
   ((i++))
 done
 
-# --- Finalization ---
 # Print a final message to the controller window
 echo "All commands sent. Demo finished."
 
-sleep 2
+sleep 3
 
 # Type "End of Demonstration" into the presentation window's prompt
 kitty @ send-text --match 'title:^Presentation$' -- "# End of Demonstration"
