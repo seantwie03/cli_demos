@@ -99,11 +99,9 @@ while (( i < ${#lines[@]} )); do
     printf '\r' > "$PRESENTATION_TTY"
 
     border_line=$(printf '#%.0s' $(seq 1 $width)) # Display a full line of #s
-    blank_line="" # An empty string for a blank line
 
     # Print content using the helper function
     print_line_and_wrap "$border_line"
-    print_line_and_wrap "$blank_line"
 
     # Main header
     main_header_text="    ${trimmed_cmd#\#^ }"
@@ -125,7 +123,6 @@ while (( i < ${#lines[@]} )); do
       fi
     done
 
-    print_line_and_wrap "$blank_line"
     print_line_and_wrap "$border_line"
 
     # Send an ENTER key to make the prompt reappear below the section header
