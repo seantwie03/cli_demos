@@ -50,12 +50,16 @@ ttys_before=$(ls /dev/pts/* 2>/dev/null)
 # 2. Spawn Presentation window
 echo "Spawning new 'Presentation' window..."
 kitten @ launch --type=os-window --title="Presentation" --spacing='margin=60'
+if command -v asciinema >/dev/null 2>&1 ; then
+    kitty @ send-text --match 'title:^Presentation$' -- "asciinema rec /tmp/$(basename ${CMD_FILE%.*}.cast) --overwrite --window-size 120x32"
+    kitty @ send-key --match 'title:^Presentation$' enter
+fi
 
 # 3. Wait and find the new TTY
 sleep 2
 ttys_after=$(ls /dev/pts/* 2>/dev/null)
 
-PRESENTATION_TTY=$(comm -13 <(echo "$ttys_before") <(echo "$ttys_after"))
+PRESENTATION_TTY=$(comm -13 <(echo "$ttys_before") <(echo "$ttys_after") | tail -n1)
 
 if [ -z "$PRESENTATION_TTY" ]; then
   echo "Error: Could not determine TTY for the 'Presentation' window." >&2
