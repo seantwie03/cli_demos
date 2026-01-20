@@ -34,7 +34,7 @@ If you don't want to use the Kitty terminal, checkout the [other implementations
 This implementation utilizes [Kitty's remote control](https://sw.kovidgoyal.net/kitty/overview/#remote-control) capability to orchestrate the demonstration across multiple windows.
 
 * The system uses two Kitty windows:
-    * The Controller window runs the main `kitty-demo.sh` script, which reads the command file and displays private presenter notes.
+    * The Controller window runs the main `kitty-demo.sh` script, which reads the command file, displays private presenter notes, and shows a preview of the next action so you always know what is coming next.
     * The Presentation window is where the audience sees the action. The script sends commands and headers to this window.
 
 * The kitty-demo.sh script acts as the central controller. It waits for input and uses `kitty @ send-text` to write commands to the Presentation window's prompt.

@@ -74,8 +74,24 @@ echo "You can now use your 'Next Command' key (e.g., F1) to advance the demo."
 # 4. Read the command file into an array.
 mapfile -t lines < <(grep -v -e '^$' "$CMD_FILE")
 
+preview_next_command() {
+  if (( i < ${#lines[@]} )); then
+    local next_line="${lines[i]}"
+    local trimmed_next="${next_line#"${next_line%%[![:space:]]*}"}"
+
+    if [[ "$trimmed_next" == '#!'* ]]; then
+      echo "Next: [Speaker Note]"
+    else
+      echo "Next: $next_line"
+    fi
+  else
+    echo "Next: (End of script)"
+  fi
+}
+
 # 5. Loop through the commands, waiting for user input each time.
 i=0
+preview_next_command
 while (( i < ${#lines[@]} )); do
   # Wait for the 'Next Command' keybinding to send an Enter keystroke to this script.
   read
@@ -88,6 +104,7 @@ while (( i < ${#lines[@]} )); do
     # Presenter note: echo to this terminal and move to the next command immediately.
     echo "Note: ${trimmed_cmd#\#!}"
     ((i++))
+    preview_next_command
     continue
   fi
 
@@ -132,12 +149,14 @@ while (( i < ${#lines[@]} )); do
     # Send an ENTER key to make the prompt reappear below the section header
     kitty @ send-key --match 'title:^Presentation$' enter
 
+    preview_next_command
     continue
   fi
 
   # This is a regular command to be typed at the prompt in the presentation window.
   kitty @ send-text --match 'title:^Presentation$' -- "$cmd"
   ((i++))
+  preview_next_command
 done
 
 # Print a final message to the controller window
