@@ -49,9 +49,9 @@ ttys_before=$(ls /dev/pts/* 2>/dev/null)
 
 # 2. Spawn Presentation window
 echo "Spawning new 'Presentation' window..."
-kitten @ launch --type=os-window --title="Presentation" --spacing='margin=60'
+kitten @ launch --type=os-window --title="Presentation" --spacing='margin=55'
 if command -v asciinema >/dev/null 2>&1 ; then
-    kitty @ send-text --match 'title:^Presentation$' -- "asciinema rec /tmp/$(basename ${CMD_FILE%.*}.cast) --overwrite --window-size 120x24"
+    kitty @ send-text --match 'title:^Presentation$' -- "asciinema rec /tmp/$(basename ${CMD_FILE%.*}.cast) --overwrite --window-size 120x25"
     kitty @ send-key --match 'title:^Presentation$' enter
 fi
 
