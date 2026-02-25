@@ -50,13 +50,19 @@ ttys_before=$(ls /dev/pts/* 2>/dev/null)
 # 2. Spawn Presentation window
 echo "Spawning new 'Presentation' window..."
 kitten @ launch --type=os-window --title="Presentation" --spacing='margin=55'
+if [[ "$XDG_CURRENT_DESKTOP" == "niri" ]]; then
+    sleep 1
+    PRES_WIN_ID=$(niri msg --json windows | jq -r '.[] | select(.title == "Presentation") | .id')
+    "$(dirname "$0")/niri-maximize_on_other_monitor.sh" "$PRES_WIN_ID"
+fi
 if command -v asciinema >/dev/null 2>&1 ; then
-    kitty @ send-text --match 'title:^Presentation$' -- "asciinema rec /tmp/$(basename ${CMD_FILE%.*}.cast) --overwrite --window-size 120x25"
+    #kitty @ send-text --match 'title:^Presentation$' -- "asciinema rec /tmp/$(basename ${CMD_FILE%.*}.cast) --overwrite --window-size 120x25"
+    kitty @ send-text --match 'title:^Presentation$' -- "asciinema rec /tmp/$(basename ${CMD_FILE%.*}.cast) --overwrite"
     kitty @ send-key --match 'title:^Presentation$' enter
 fi
 
 # 3. Wait and find the new TTY
-sleep 2
+sleep 0.5
 ttys_after=$(ls /dev/pts/* 2>/dev/null)
 
 PRESENTATION_TTY=$(comm -13 <(echo "$ttys_before") <(echo "$ttys_after") | tail -n1)
