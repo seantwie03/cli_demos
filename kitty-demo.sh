@@ -1,6 +1,6 @@
 #!/bin/bash
 
-CMD_FILE="./sample_command_file.sh"
+CMD_FILE='/home/sean/s/cli_demos/./sample_command_file.sh'
 
 if [ ! -f "$CMD_FILE" ]; then
   echo "Error: Command file not found at: $CMD_FILE" >&2
@@ -14,11 +14,19 @@ fi
 # It calculates the amount of blank space available after the line content from
 # the CMD_FILE. Then it puts that many space characters. This way the next line
 # from the CMD_FILE will be printed starting at column 1 on the next line down.
+# Color for the Section Headers (borders and text alike).
+COLOR_RESET=$'\033[0m'
+HEADER_COLOR=$'\033[1;34m'
+
 # This function is only intended to be used for Section Headers.
+# The optional second argument is an ANSI color escape applied to the text.
+# The padding is calculated from the plain text, so the escape codes (which
+# take up no columns on screen) don't throw off the line wrapping.
 print_line_and_wrap() {
   local text="$1"
+  local color="${2-}"
   # Print the text without a newline
-  printf "%s" "$text" > "$PRESENTATION_TTY"
+  printf "%s%s%s" "$color" "$text" "${color:+$COLOR_RESET}" > "$PRESENTATION_TTY"
   # Calculate spaces needed to fill the line
   local spaces_to_fill=$((width - ${#text}))
   # Print the spaces if needed
@@ -127,12 +135,15 @@ while (( i < ${#lines[@]} )); do
 
     border_line=$(printf '#%.0s' $(seq 1 $width)) # Display a full line of #s
 
+    # Blank line to separate the header from whatever is above it
+    print_line_and_wrap ""
+
     # Print content using the helper function
-    print_line_and_wrap "$border_line"
+    print_line_and_wrap "$border_line" "$HEADER_COLOR"
 
     # Main header
     main_header_text="    ${trimmed_cmd#\#^ }"
-    print_line_and_wrap "$main_header_text"
+    print_line_and_wrap "$main_header_text" "$HEADER_COLOR"
     ((i++))
 
     # Subsequent lines
@@ -143,14 +154,14 @@ while (( i < ${#lines[@]} )); do
 
       if [[ "$trimmed_line" == '#'* && "$trimmed_line" != '#^'* && "$trimmed_line" != '#!'* ]]; then
         sub_line_text="        ${trimmed_line#\# }"
-        print_line_and_wrap "$sub_line_text"
+        print_line_and_wrap "$sub_line_text" "$HEADER_COLOR"
         ((i++))
       else
         break
       fi
     done
 
-    print_line_and_wrap "$border_line"
+    print_line_and_wrap "$border_line" "$HEADER_COLOR"
 
     # Send an ENTER key to make the prompt reappear below the section header
     kitty @ send-key --match 'title:^Presentation$' enter
