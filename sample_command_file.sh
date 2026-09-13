@@ -18,8 +18,8 @@ clear
 
 #^ 3. Test TUIs like vim
 vim /tmp/abc.sh
-#! The next line assumes you have this vim-mapping: inoremap jj <ESC>
 i#!/bin/bash
 echo "Hello, world!"
-jj:wq
+#@ key escape
+:wq
 chmod a+x /tmp/abc.sh

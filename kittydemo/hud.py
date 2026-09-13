@@ -72,9 +72,10 @@ def _wrap(text: str, width: int) -> list[str]:
 def action(step: Step) -> str:
     if step.kind == "header":
         return "[CLEAR+SHOW]" if step.clears else "[SHOW]"
-    return {"arm": "[TYPE]", "run": "[ENTER]", "send": "[SEND]", "end": "[END]"}[
-        step.kind
-    ]
+    return {
+        "arm": "[TYPE]", "run": "[ENTER]", "send": "[SEND]",
+        "key": "[KEY]", "end": "[END]",
+    }[step.kind]
 
 
 def title(step: Step) -> str:

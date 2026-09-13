@@ -365,8 +365,8 @@ class NoEnterBinding(unittest.TestCase):
 
     def test_a_command_gets_its_enter_without_being_asked(self):
         self.assertEqual(
-            [(s.kind, s.text) for s in parse("jj:wq\n")[:2]],
-            [("arm", "jj:wq"), ("run", "jj:wq")],
+            [(s.kind, s.text) for s in parse(":wq\n")[:2]],
+            [("arm", ":wq"), ("run", ":wq")],
         )
 
     def test_noenter_makes_a_command_a_single_send(self):

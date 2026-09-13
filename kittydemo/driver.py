@@ -261,7 +261,7 @@ def send_text(text: str) -> None:
 
 
 def send_key(key: str) -> None:
-    kitty("send-key", "--match", MATCH, key)
+    kitty("send-key", "--match", MATCH, "--", key)
 
 
 def draw_header(session: Session, lines: tuple[str, ...]) -> None:
@@ -305,6 +305,8 @@ def perform(session: Session, step: Step) -> None:
         send_key("enter")
     elif step.kind == "send":
         send_text(step.text)
+    elif step.kind == "key":
+        send_key(step.text)
     elif step.kind == "end":
         send_text(SENTINEL)
         send_key("enter")

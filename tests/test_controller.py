@@ -88,7 +88,7 @@ class Playback(unittest.TestCase):
             )
 
     def test_f2_only_matches_record_sequence_and_pauses(self):
-        source = "clear\n#^ Section\n#! note\npwd\n#@ pause 7\nls\n#@ noenter\nq\n"
+        source = "clear\n#^ Section\n#! note\npwd\n#@ pause 7\nls\n#@ noenter\nq\n#@ pause 2\n#@ key ctrl+x\ny\n"
         steps = parse(source)
         live, _, _, _ = self.play(source, ["advance"] * (len(steps) + 1))
         recorded, _, sleeps, reader_count = self.play(source, [], record=True)

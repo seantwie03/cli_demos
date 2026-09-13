@@ -267,47 +267,30 @@ the Python parser emits `indented` with no leading spaces. This changes here-doc
 
 **Recommendation:** Classify using a stripped view, but preserve the original line for emitted text. Test indentation recognition separately from payload preservation. Blank-line removal is an existing format limitation too; document it and add an explicit way to send a blank line only if your exercises need one.
 
-### 8. P2 — The annotation helper can break correct Vim commands
+### 8. Resolved — Explicit key steps
 
-**Location:** `tools/suggest_noenter.py:32–44, 61–68`.
+The authoring heuristic and its usage instructions have been removed. Literal text still uses the normal type/Enter pair, or `#@ noenter` when it should arrive without Enter.
 
-The immediate-keystroke pattern includes `:q` and `:q!`. Those Vim Ex commands need Enter. Applying the suggested `#@ noenter` leaves Vim at its command line; the next demo line gets appended there instead of reaching the shell. `suggestions(':q\n')` returns a suggestion in a direct probe.
+#### Implemented: explicit Kitty key steps
 
-The `^X` pattern also suggests an annotation for textual caret notation, but the driver has no conversion of `^X` into a Ctrl-X key event. Removing Enter does not make this notation a control key.
-
-The helper's binding state also differs from the parser: `#@ noenter`, followed by `#@ pause 2`, followed by `q` is already correctly annotated, but the pause resets `annotated`, so the helper proposes a duplicate noenter. Conversely, a typed comment consumes directives in the engine while the helper skips it without consuming state.
-
-**Recommendation:** The easiest simplification is to remove this heuristic tool and annotate the few actual exceptions while rehearsing. If retained, remove the incorrect patterns, use the parser's binding semantics, and test both valid Ex commands and combined directives before allowing bulk `--apply`.
-
-#### Suggested implementation: explicit Kitty key steps
-
-**Status:** Proposal only. The code changes initially started for this finding were reverted, including restoring the script. Implement this section only after the design is accepted.
-
-**Remove the authoring heuristic.** Delete `tools/suggest_noenter.py` and remove its references and usage instructions from the documentation. When that change is implemented, replace this finding's obsolete tool-specific diagnosis with a short resolution and the supported command-file syntax, so the findings document does not retain obsolete references either. Keep `#@ noenter` for literal text that should arrive without an automatic Enter; do not infer editor state or rewrite existing command files.
-
-**Add `#@ key KEY` as an action.** Unlike `pause` and `noenter`, this directive is itself a complete step. One F2 press sends the specified key combination to the Presentation window. It has no separate type/run phases and appends no Enter. For example:
+`#@ key KEY` is a complete action. One F2 press sends its argument through [Kitty's send-key](https://sw.kovidgoyal.net/kitty/remote-control/#kitten-send-key), with no extra Enter. For example:
 
 ```sh
 nano demo.txt
 A note for this demonstration.
 #@ key ctrl+x
-#@ key y
-#@ key enter
+y
 ```
 
-Here Ctrl-X and `y` are separate F2 actions. The last action supplies Enter if nano prompts to confirm the filename; tailor that final step to the demonstrated interaction. Alternatively, `#@ noenter` followed by a literal `y` sends that character without Enter. A bare `y` command-file line still uses the normal type/run pair and therefore submits Enter on the second press.
+One F2 sends Ctrl-X. The plain `y` line then uses the normal pair: F2 types `y` to answer the save prompt, and the next F2 sends Enter to confirm the filename.
 
-**Use Kitty's syntax directly.** Preserve the directive's argument, apart from surrounding whitespace, as one key specification and pass it unchanged to `driver.send_key()`. Do not lowercase it, translate `Ctrl+x` into control bytes, maintain a key-name table, or interpret caret notation such as `^X`. The accepted combinations and terminal/application behavior are those of [Kitty's `send-key`](https://sw.kovidgoyal.net/kitty/remote-control/#kitten-send-key). Use one key specification per directive; separate successive presses into separate directives rather than inventing sequence syntax.
+**Argument handling:** The parser preserves case and internal whitespace, trimming only surrounding whitespace. The driver passes the argument as one key specification using `kitty @ send-key --match MATCH -- KEY`. There is no key-name table or conversion of caret notation into control bytes. Use separate directives for successive key presses. A missing argument produces a source-line error; `--check` leaves validation of key names to Kitty. Delivery depends on the application's keyboard mode, and Kitty may report success without delivering a key.
 
-At the subprocess boundary, use an argument list equivalent to `kitty @ send-key --match MATCH -- KEY`. The option terminator ensures the key argument is treated as data. Local parsing should reject a missing argument with a source-line error, but leave validation of key names/combinations to Kitty. Consequently, `--check` validates the directive's structure, not whether a key is recognized or deliverable. Kitty documents that send-key can succeed without delivering a key, so a successful remote-control invocation is not proof of delivery; rehearsal remains the practical check.
+**Parser and playback:** Key steps consume pending notes and pauses, then reset that state. Pauses apply after delivery in record mode only. A pending `#@ noenter` before a key step is rejected because the step already sends no extra Enter. Consecutive keys and a final key are supported. Keys prevent a preceding `clear` from merging across them into a header.
 
-**Parser integration:** Add `key` to the directive names and emit `Step(kind="key", text=argument, ...)` immediately. Attach pending presenter notes and `#@ pause N` to that step, then reset the pending state. The pause remains record-only and occurs after sending the key. Reject a pending `#@ noenter` before a key step with a helpful error: key steps already send no extra Enter, and silently carrying the modifier to another command would be surprising. A key at the end of the file is valid and is followed by the existing end step.
+**Navigation and HUD:** Key steps use the existing navigation stops. Selection and revisiting do not send anything until F2 is pressed. The selected row shows `[KEY]` in the left action column and the key specification as its text. Notes and scrolling use the same behavior as other items. Live and record playback share the same key actions.
 
-Update the clear/header lookahead to treat `#@ key` as a real intervening action. For `clear`, then `#@ key ctrl+x`, then a header, the clear must remain an ordinary command; it must not be moved across the key and merged into the later header. Notes and modifier directives can continue to be skipped by that lookahead.
-
-**Driver, navigation, and HUD:** Add a `key` branch to `perform()` that calls only `send_key(step.text)`. The same step works in live and record modes. The existing cursor already treats every non-`run` step as a navigation stop, so key steps participate in backward/forward selection without another cursor mechanism. Display the key specification on its row and `[KEY]` only when that row is selected. Notes, scrolling, and selection-only navigation should behave exactly as for other single-action items. Selecting or revisiting a key row must not send it until F2 is pressed.
-
-**Documentation and verification:** Add the directive and nano example to the README, distinguishing real key events from literal text and `#@ noenter`. Test nonempty argument preservation, missing arguments, note/pause binding and reset, redundant noenter rejection, consecutive/end-of-file key steps, and prevention of clear/header merging across a key. Verify exact subprocess arguments and that one key step sends no text or additional Enter. Cover `[KEY]` rendering, navigation without delivery, and identical key-step order in live and recording playback. Finally rehearse the nano exit/save sequence in an isolated presentation before considering the feature complete.
+**Verification:** Tests cover argument preservation, missing arguments, note/pause binding and reset, redundant noenter rejection, consecutive/final keys, clear/header boundaries, exact subprocess arguments, the nano sequence without extra Enter, selection-only navigation, and `[KEY]` rendering. The live/record sequence test includes key steps and their pauses. A separate real nano rehearsal in an isolated PTY confirmed that Ctrl-X, plain `y`, then Enter saves the expected file and exits. This checks nano's interaction; end-to-end delivery through a graphical Kitty window remains a manual rehearsal.
 
 ### 9. P2 — Singleton machinery is racy and imposes unnecessary window cleanup
 
@@ -374,7 +357,7 @@ This is inherited from the Bash renderer, but remains relevant with a fixed 120-
 3. **Implemented: request-based input.** Enter-delimited requests now cover advancement, navigation, and viewport scrolling without raw mode or debounce. Ctrl-C/EOF and resize handling are tested with actual PTYs.
 4. **Finish the lifecycle around the implemented PTY discovery.** Keep the snapshot approach, move device validation before prompt setup, clean up launch failures, and verify recording completion before publication. Keep configurable pauses and document the accepted startup/command timing assumptions. Direct recorder launch can be considered separately if it simplifies ownership; a shell handshake is not part of the selected plan.
 5. **Move personal presentation policy out of the generic launch path.** The 55-pixel margins, Niri monitor placement, forced 120×24 size, Bash-specific prompt mutations, and external cast-processing instructions are personal workflow choices. Put the desktop/prompt setup in a small optional wrapper or documented local configuration. Do not replace them with a large framework of options. In particular, record mode chooses `$SHELL` but then sends Bash-oriented setup; choose a supported recording shell explicitly if that setup stays.
-6. **Delete or shrink peripheral features.** The noenter suggestion tool and destructive-command regex remain removal candidates. The directory validator is small and shares the parser, so keeping it is defensible if you actually use it. Retain the agreed full-height command list and readable notes implemented for Finding 4.
+6. **Delete or shrink peripheral features.** The destructive-command regex remains a removal candidate. The directory validator is small and shares the parser, so keeping it is defensible if you actually use it. Retain the agreed full-height command list and readable notes implemented for Finding 4.
 7. **Implemented: manual-detour contract.** Manual input remains unconstrained. The README explains retyping or skipping canceled input with F1/F3 and restoring the expected application state before resuming.
 
 There is no need to collapse everything into one large Python file. Separating parsing from terminal side effects already helps testing. Reduce policies and hidden assumptions before reducing the module count.
@@ -383,11 +366,11 @@ One product distinction to decide deliberately: the old Bash script automaticall
 
 ## Verification and test gaps
 
-The implementation verification command is `python3 -m unittest discover -s tests -t .`. The suite now has **85 tests**: the original 56 parser tests, seven PTY-discovery tests, and 22 new navigation/playback, HUD, and real-terminal input tests. Coverage includes type/run recovery, header navigation, selection-only behavior, completion, unchanged record steps/pauses, full note access, sizing/wrapping, Ctrl-C/EOF cleanup, non-echoing requests, and resize during a partial request. Recorder startup/shutdown and authoring-tool gaps remain. `Session` width/output were exercised by the separate real-recording diagnostic, not a committed automated test.
+The implementation verification command is `python3 -m unittest discover -s tests -t .`. The suite now has **92 tests**: the original 56 parser tests, seven PTY-discovery tests, 22 navigation/playback, HUD, and real-terminal input tests, and seven explicit-key tests. Coverage includes type/run recovery, header navigation, selection-only behavior, completion, unchanged record steps/pauses, full note access, sizing/wrapping, Ctrl-C/EOF cleanup, non-echoing requests, and resize during a partial request. Recorder startup/shutdown gaps remain. `Session` width/output were exercised by the separate real-recording diagnostic, not a committed automated test.
 
 The installed Kitty parser accepted the five documented mappings and confirmed that the navigation/scroll payloads end in actual newlines and only PageUp/PageDown are focus-conditional. An additional full-controller PTY diagnostic, with presentation effects mocked, reached the completion screen and confirmed that Ctrl-C exits 130, releases the session claim, and restores the terminal and alternate screen without a traceback. No user's Kitty configuration or existing Presentation window was modified.
 
-Original diagnostic probes confirmed header/note parsing, lost command indentation, noenter argument acceptance, incorrect annotation suggestions, infinite CLI pause acceptance, EOF behavior, Ctrl-C handling in a PTY, the payload of a pending run action, cleanup failure publication, and missing teardown after launch failure. An isolated real asciinema recording demonstrated the original inner/outer PTY mismatch. After the fix, a second isolated recording confirmed correct inner-PTY selection, 120-column width, and capture of a unique header through `draw_header()`. Installed Kitty help/source and its escape parser were inspected without sending remote-control commands to your windows.
+Original diagnostic probes confirmed header/note parsing, lost command indentation, noenter argument acceptance, infinite CLI pause acceptance, EOF behavior, Ctrl-C handling in a PTY, the payload of a pending run action, cleanup failure publication, and missing teardown after launch failure. An isolated real asciinema recording demonstrated the original inner/outer PTY mismatch. After the fix, a second isolated recording confirmed correct inner-PTY selection, 120-column width, and capture of a unique header through `draw_header()`. Installed Kitty help/source and its escape parser were inspected without sending remote-control commands to your windows.
 
 I did not launch or close any of your Kitty windows, execute your demonstration commands, or exercise SSH/sudo/Vim interactively. Full graphical behavior and recorder shutdown timing still need a controlled integration rehearsal; the report distinguishes those unverified timing risks from directly reproduced defects.
 
@@ -397,6 +380,6 @@ The most valuable added checks would be:
 - Payload tests preserving whitespace and backslashes through the driver boundary.
 - Extend the existing launch-selection tests to verify cleanup after discovery/startup failure, early recorder exit, failed shutdown, and preservation of the previous cast.
 - Turn the successful isolated header-recording diagnostic into a repeatable integration test. Separately verify that the CLI waits for finalization before reporting success; the diagnostic finished its recorder normally and did not test the CLI's close-window/rename path.
-- Parser/helper cases for invisible lines inside headers, Vim Ex commands, and combined directives; use the actual sample file as a fixture if documentation promises that coverage.
+- Parser cases for invisible lines inside headers and combined directives; use the actual sample file as a fixture if documentation promises that coverage.
 
 These would cover the risky boundaries much more effectively than adding more variations of already-tested type/run sequences.

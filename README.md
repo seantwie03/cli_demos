@@ -92,7 +92,7 @@ sample_command_file.sh · item 5/17 · line 10
 ```
 
 The left-hand label says what the next F2 press will do: `[TYPE]`, `[ENTER]`, `[SEND]`
-(keystrokes without Enter), `[SHOW]` (a header), `[CLEAR+SHOW]` (a header with
+(keystrokes without Enter), `[KEY]` (a key event), `[SHOW]` (a header), `[CLEAR+SHOW]` (a header with
 merged clear), or `[END]`. After typing a command, the label stays beside it and
 changes to `[ENTER]`. After submission, the label moves to the next item.
 The status shows the command file, selected item, and source line. Record mode
@@ -198,13 +198,17 @@ Use `#!` for a comment the audience should not see.
 | ------------ | ----------------------------------------------------- |
 | `#@ pause N` | Hold N seconds after the next step. Record mode only.  |
 | `#@ noenter` | The next line is keystrokes; send no Enter after it.   |
+| `#@ key KEY` | Send one Kitty key specification, with no extra Enter. |
 
-Both must be followed by the step they apply to.
+`pause` and `noenter` must be followed by the step they apply to. `key` is
+itself an action: one F2 press sends the key. Notes and a pending pause apply
+to that action; a pending `noenter` before it is an error.
 
 **Why `#@ noenter` exists.** Every line gets an Enter unless it says
 otherwise. That is right at a shell prompt, and right for most lines inside an
 editor too, because there the Enter is the newline: a body line being inserted
-needs one, and so does `jj:wq`. The exceptions are keystrokes that finish the
+needs one, and so does `:wq` after leaving insert mode with `#@ key escape`.
+The exceptions are keystrokes that finish the
 moment they arrive, such as `q` leaving a pager or `dd` deleting a line. Those
 need marking, or the Enter lands somewhere it was not wanted.
 
@@ -217,18 +221,26 @@ q
 ls -l /tmp
 ```
 
-Nothing tries to detect where an editor starts and ends. That needs a
-heuristic wrong often enough to be worse than the default, and the default is
-already right for the large majority of lines. To find the exceptions in
-existing files:
+Use `#@ key` for combinations such as Ctrl-X. For example:
 
-```
-tools/suggest_noenter.py path/            # show suggestions
-tools/suggest_noenter.py path/ --apply    # insert them
+```sh
+nano demo.txt
+A note for this demonstration.
+#@ key ctrl+x
+y
 ```
 
-It reads line shape only, so review what it proposes. Playing the exercise
-back is what proves the result.
+One F2 sends Ctrl-X. On the plain `y` line, F2 types `y` to answer the save
+prompt, then the next F2 sends Enter to confirm the filename.
+
+The argument uses [Kitty's send-key syntax](https://sw.kovidgoyal.net/kitty/remote-control/#kitten-send-key)
+directly, preserving case and internal whitespace. Use one key specification
+per directive, with separate directives for successive key presses. There is
+no translation of literal text such as `^X` into control keys.
+`--check` rejects a missing key argument but leaves key-name validation to
+Kitty. Delivery depends on the application's keyboard mode; Kitty may report
+success even when it cannot deliver a key. Rehearse the interaction in the
+target application and annotate any literal text needing `#@ noenter` by hand.
 
 ## Validating command files
 

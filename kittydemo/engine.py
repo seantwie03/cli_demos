@@ -36,11 +36,13 @@ Directives::
 
     #@ pause N     hold N seconds after the next step (record mode only)
     #@ noenter     the next line is keystrokes, so send no Enter after it
+    #@ key KEY     send one Kitty key specification, without extra Enter
 
 Every line gets an Enter unless it says otherwise. That is right at a shell
 prompt and right for most keystrokes inside an editor too, because there the
 Enter is the newline: a body line being inserted needs one, and so does
-``jj:wq``. Only keystrokes that act the moment they arrive, such as ``q`` in a
+``:wq`` after leaving insert mode with ``#@ key escape``.
+Only keystrokes that act the moment they arrive, such as ``q`` in a
 pager or ``dd`` in vim, must not get one, and those are the lines to mark.
 
 Nothing here tries to work out where a full-screen program begins or ends.
@@ -63,7 +65,7 @@ DIRECTIVE = "#@"
 #: post-processor trims to, so it must not change without updating that script.
 SENTINEL = "# End"
 
-DIRECTIVES = frozenset({"pause", "noenter"})
+DIRECTIVES = frozenset({"pause", "noenter", "key"})
 
 
 def strip_marker(text: str, marker: str) -> str:
@@ -89,7 +91,7 @@ class Step:
 
     #: ``header`` draws a section header, ``arm`` puts a command on the prompt,
     #: ``run`` executes what is on the prompt, ``send`` types keystrokes that
-    #: need no Enter, and ``end`` is the terminal step.
+    #: need no Enter, ``key`` sends a key event, and ``end`` is the terminal step.
     kind: str
     text: str = ""
     #: Audience-visible header lines, for ``header`` steps.
@@ -242,6 +244,12 @@ def parse(source: str) -> list[Step]:
             if name == "noenter":
                 pending.noenter = True
                 pending.noenter_line = number
+            elif name == "key":
+                if not argument:
+                    raise CommandFileError(f"line {number}: key needs a key specification")
+                refuse_stray_noenter("a key step (which already sends no extra Enter)")
+                emit(Step(kind="key", text=argument, pause=pending.pause, line=number))
+                pending.reset()
             else:
                 pending.pause = _parse_pause(argument, number)
                 pending.pause_line = number
@@ -311,10 +319,14 @@ def parse(source: str) -> list[Step]:
 def _opens_header(raw: list[tuple[int, str]], index: int) -> bool:
     """Whether a header block starts here, ignoring anything invisible first.
 
-    A note or a directive between the `clear` and the header is still part of
-    the same section transition, so neither should cost the extra two presses
-    that failing to merge would add.
+    Notes and modifier directives can be part of the same section transition.
+    A key directive is an action and prevents merging across it.
     """
     while index < len(raw) and classify(raw[index][1]) in {"directive", "note"}:
+        if (
+            classify(raw[index][1]) == "directive"
+            and directive_of(raw[index][1])[0] == "key"
+        ):
+            return False
         index += 1
     return index < len(raw) and classify(raw[index][1]) == "header"
