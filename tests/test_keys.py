@@ -42,10 +42,10 @@ class KeySteps(unittest.TestCase):
         steps = parse('nano demo.txt\nA note for this demonstration.\n#@ key ctrl+x\ny\n')
         with patch.object(driver.subprocess, 'run') as run:
             for step in steps[:-1]:
-                driver.perform(object(), step)
+                driver.perform(driver.Session(window_id=7), step)
         self.assertEqual(
             [c.args[0][2:] for c in run.call_args_list],
-            [[command, '--match', driver.MATCH, '--', value] for command, value in (
+            [[command, '--match', "id:7", '--', value] for command, value in (
                 ('send-text', 'nano demo.txt'), ('send-key', 'enter'),
                 ('send-text', 'A note for this demonstration.'), ('send-key', 'enter'),
                 ('send-key', 'ctrl+x'), ('send-text', 'y'), ('send-key', 'enter'),
@@ -54,10 +54,10 @@ class KeySteps(unittest.TestCase):
 
     def test_key_argument_is_one_subprocess_argument(self):
         with patch.object(driver.subprocess, 'run') as run:
-            driver.perform(object(), parse('#@ key --help\n')[0])
+            driver.perform(driver.Session(window_id=7), parse('#@ key --help\n')[0])
         run.assert_called_once_with(
-            ['kitty', '@', 'send-key', '--match', driver.MATCH, '--', '--help'],
-            check=True, capture_output=True, text=True,
+            ['kitty', '@', 'send-key', '--match', "id:7", '--', '--help'],
+            check=True, capture_output=True, text=True, timeout=5,
         )
 
     def test_navigation_and_hud_do_not_deliver_keys(self):
@@ -73,5 +73,5 @@ class KeySteps(unittest.TestCase):
             cursor.navigate('back')
             self.assertEqual(cursor.steps[cursor.index].kind, 'key')
             run.assert_not_called()
-            driver.perform(object(), cursor.steps[cursor.index])
+            driver.perform(driver.Session(window_id=7), cursor.steps[cursor.index])
             run.assert_called_once()

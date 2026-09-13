@@ -15,14 +15,16 @@ cannot be parsed stops the run here, while no window is open, no session is
 claimed, and nothing is recording. `--check` is that validation on its own.
 
 Only one demonstration runs at a time. Starting a second one fails with a
-message naming the window to close, because both windows are addressed by a
-fixed title and kitty would otherwise apply commands to both.
+message naming the window to close. Presentation commands and cleanup target
+the window ID owned by this run.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import tempfile
+import subprocess
 import sys
 import time
 from contextlib import nullcontext
@@ -63,6 +65,7 @@ def play(options, path: Path, steps, session: driver.Session) -> None:
                 sys.stdout.flush()
                 scroll = frame.scroll
                 if options.record:
+                    session.check_recording()
                     if cursor.finished:
                         time.sleep(options.pause)
                         return
@@ -96,37 +99,33 @@ def play(options, path: Path, steps, session: driver.Session) -> None:
 
 def run(options, path: Path, steps) -> int:
     """Launch a session, play it, and clean up whatever happened."""
-    destination = partial = None
-    if options.record:
-        destination = path.with_suffix(".cast")
-        # Same directory, so the final move is atomic. A run that fails partway
-        # must not leave a half-written cast where the previous good one was.
-        partial = destination.with_name(destination.name + ".partial")
-
-    session = driver.launch(record=options.record, cast=partial)
-    completed = False
+    destination = partial = session = None
     try:
-        play(options, path, steps, session)
-        completed = True
-    finally:
         if options.record:
+            destination = path.with_suffix(".cast")
+            descriptor, name = tempfile.mkstemp(prefix=destination.name + ".", suffix=".partial", dir=destination.parent)
+            os.close(descriptor)
+            partial = Path(name)
+        session = driver.launch(record=options.record, cast=partial)
+        play(options, path, steps, session)
+        if options.record:
+            driver.teardown(record=True, session=session)
+            if partial.stat().st_size == 0:
+                raise driver.RecordingError("Recorder produced an empty file")
+            with partial.open("rb") as recording:
+                os.fsync(recording.fileno())
+            os.replace(partial, destination)
+            print(f"\nRecording written to {destination}")
+        return 0
+    except BaseException:
+        if options.record and session is not None:
             try:
-                driver.teardown(record=True)
-            except Exception as cleanup:  # noqa: BLE001
-                # Never mask the original failure with a cleanup failure.
-                print(
-                    f"warning: could not close the presentation window: {cleanup}",
-                    file=sys.stderr,
-                )
-            if completed:
-                os.replace(partial, destination)
-            else:
-                partial.unlink(missing_ok=True)
-
-    if options.record:
-        print(f"\nRecording written to {destination}")
-        print("Process it with: pnpm run casts -- <path>")
-    return 0
+                session.abort()
+            except Exception as cleanup:
+                print(f"warning: recording cleanup failed: {cleanup}", file=sys.stderr)
+        if partial is not None and partial.exists():
+            print(f"Incomplete recording retained at {partial}", file=sys.stderr)
+        raise
 
 
 def _main(argv: list[str]) -> int:
@@ -171,18 +170,28 @@ def _main(argv: list[str]) -> int:
     except driver.SessionInUse as conflict:
         raise SystemExit(str(conflict)) from conflict
 
-    driver.claim_controller_window()
     try:
+        driver.claim_controller_window()
         return run(options, path, steps)
     finally:
-        driver.release_controller_window()
-        driver.release_session()
+        failed = sys.exc_info()[0] is not None
+        cleanup_error = None
+        for cleanup in (driver.release_controller_window, driver.release_session):
+            try:
+                cleanup()
+            except Exception as error:
+                if failed or cleanup_error is not None:
+                    print(f"warning: controller cleanup failed: {error}", file=sys.stderr)
+                else:
+                    cleanup_error = error
+        if cleanup_error is not None:
+            raise cleanup_error
 
 
 def main(argv: list[str]) -> int:
     try:
         return _main(argv)
-    except driver.KittyConnectionError as error:
+    except (driver.KittyConnectionError, driver.RecordingError, OSError, subprocess.SubprocessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:

@@ -91,23 +91,38 @@ class LaunchDiscovery(unittest.TestCase):
         self.inner = Path("/dev/pts/10")
         self.devices = {Path("/dev/pts/1")}
         self.stack.enter_context(patch.object(driver, "tty_paths", side_effect=lambda: self.devices.copy()))
-        self.kitty.side_effect = lambda *args: self.devices.add(self.outer)
-        self.stack.enter_context(patch.object(driver, "_windows", return_value=[{"title": driver.TITLE, "pid": 42}]))
+        def launch(*args, **kwargs):
+            if args[0] == "launch":
+                self.devices.add(self.outer)
+            return subprocess.CompletedProcess([], 0, "7")
+        self.kitty.side_effect = launch
+        self.abort = self.stack.enter_context(patch.object(driver.Session, "abort", autospec=True, side_effect=lambda session: session.dispose()))
+        self.wait_file = self.stack.enter_context(patch.object(driver.Session, "wait_file", autospec=True))
+        self.stack.enter_context(patch.object(driver.time, "monotonic", side_effect=iter(range(100))))
+        self.stack.enter_context(patch.object(driver, "_windows", return_value=[{"title": driver.TITLE, "pid": 42, "id": 7}]))
         self.terminal_of = self.stack.enter_context(patch.object(driver, "_terminal_of", return_value=self.outer))
 
     def test_live_selects_window_pty(self):
         self.assertEqual(driver.launch(False, None).tty_path, self.outer)
 
     def test_record_snapshot_excludes_outer_pty(self):
-        def start_recorder(text):
-            if text.startswith("asciinema rec "):
+        def start_recorder(session, name, *args):
+            if name == "running":
+                self.assertTrue((session.control / "start").exists())
                 self.devices.add(self.inner)
-        self.send_text.side_effect = start_recorder
-        self.assertEqual(driver.launch(True, Path("/tmp/test.cast")).tty_path, self.inner)
+        self.wait_file.side_effect = start_recorder
+        session = driver.launch(True, Path("/tmp/test.cast"))
+        self.addCleanup(session.dispose)
+        self.assertEqual(session.tty_path, self.inner)
+        self.assertEqual(session.window_id, 7)
+        self.send_text.assert_called_once_with("PS1='$ '; unset PROMPT_COMMAND PS0; clear", match="id:7")
 
     def test_record_does_not_fall_back_to_outer_pty(self):
         with self.assertRaisesRegex(RuntimeError, "found 0"):
             driver.launch(True, Path("/tmp/test.cast"))
+        self.abort.assert_called_once()
+        self.assertEqual(self.abort.call_args.args[0].window_id, 7)
+        self.send_text.assert_not_called()
 
     def test_missing_outer_pty_stops_before_recorder_start(self):
         self.terminal_of.return_value = None

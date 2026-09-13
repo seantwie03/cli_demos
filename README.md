@@ -14,8 +14,9 @@ To see a sped up demonstration using this tool check my [Asciinema profile](http
 
 ## Setup
 
-Requires [Kitty](https://sw.kovidgoyal.net/kitty/) and Python 3. There is
-nothing to install; the package has no third-party dependencies.
+Requires Linux, [Kitty](https://sw.kovidgoyal.net/kitty/), Python 3.9+, and
+`stty`. The Python package has no third-party dependencies. Recording also
+requires Bash, asciinema 3, and Linux pidfd support (kernel 5.3+).
 
 1. Clone this repository, and put `kitty-demo.py` somewhere on your `PATH`:
 
@@ -81,6 +82,37 @@ With `socket-only`, both `send-key` and `send-text` use the inherited socket
 address; terminal remote-control requests are denied. See [Kitty listener
 configuration](https://sw.kovidgoyal.net/kitty/conf/#opt-kitty.listen_on) and
 [socket invocation](https://sw.kovidgoyal.net/kitty/remote-control/#remote-control-via-a-socket).
+
+## Recording and window placement
+
+`--record` uses an interactive Bash login shell, advances on the configured
+pauses, and records at 120×24. At completion, a supervisor ends the recorded
+shell with SIGHUP and waits for asciinema to exit successfully before closing
+the owned Presentation window and replacing the destination cast. This verifies
+recording finalization; it does not detect whether each demonstrated command
+finished successfully. Give long-running commands sufficient pauses.
+
+Each attempt writes a unique `*.cast.<random>.partial` file beside the command
+file. Startup, playback, shutdown, or publication failure preserves the previous
+cast and reports the retained partial's pathname. A retry uses a new pathname.
+Forced recorder termination is a failure, never a successful publication.
+Ctrl-C follows the same cleanup path. Live mode leaves a successfully launched
+Presentation open for questions, including after interruption.
+
+KDE Plasma 6 and Niri automatically place the Presentation on the next active
+output by connector-name order, relative to the output active before launch.
+With two monitors this is the other monitor; with one it stays there and is
+maximized. KDE verifies output and maximization through a temporary KWin script,
+then unloads it. No permanent window rules or extra KDE setup are needed.
+KDE uses `gdbus`; Niri retains its helper and `jq` dependency. If placement is
+unavailable or times out, a warning is printed and the demo continues where the
+window opened. On other desktops, ordinary window placement applies.
+
+Niri's maximize-column action operates on focus: the helper explicitly focuses
+and checks the new window first, but a simultaneous focus change can still race
+that final action. KDE targets the specific window throughout. Physical
+multi-monitor KDE movement and the updated Niri helper still need rehearsal;
+KDE single-monitor maximization and recording have been verified.
 
 ## How it works
 

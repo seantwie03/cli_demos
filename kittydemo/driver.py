@@ -12,33 +12,31 @@ live
     demonstration is usually followed by questions that need the terminal.
 
 record
-    Steps advance on a timer into a sanitized session that asciinema is
-    recording. At the end the presentation window is closed, which stops the
-    recording cleanly and never returns to the local shell.
+    Steps advance on a timer into a sanitized Bash session. A supervisor waits
+    for asciinema to finish before the Presentation closes and the cast is published.
 
-Only one demonstration may run at a time. Both windows are addressed by a
-fixed title, and kitty applies a remote-control command to every window that
-matches, so a second session would let commands reach the previous
-demonstration's window and would split the advance key between two
-controllers. Refusing to start is simpler than telling two sessions apart, and
-it needs no change to the instructor's `kitty.conf`.
+Only one controller runs at a time. Presentation operations use the ID returned
+by Kitty; a unique per-run marker also identifies a launch whose reply is lost.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import shlex
 import select
+import signal
 import shutil
 import subprocess
 import sys
 import termios
 import time
+import tempfile
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 from .engine import SENTINEL, Step
+from .placement import Placement
 
 TITLE = "Presentation"
 MATCH = f"title:^{TITLE}$"
@@ -58,13 +56,17 @@ class SessionInUse(RuntimeError):
     """Another demonstration is already running."""
 
 
+class RecordingError(RuntimeError):
+    """Recording startup or finalization could not be verified."""
+
+
 class KittyConnectionError(RuntimeError):
     """Kitty could not provide a usable remote-control response."""
 
 
 def kitty(*arguments: str, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["kitty", "@", *arguments], check=check, capture_output=True, text=True
+        ["kitty", "@", *arguments], check=check, capture_output=True, text=True, timeout=5
     )
 
 
@@ -116,13 +118,9 @@ def _process_alive(pid: int) -> bool:
 def claim_session() -> None:
     """Refuse to start when a demonstration is already running.
 
-    Both windows are checked, because a duplicate of either breaks a different
-    thing: a second presentation window receives commands meant for this
-    session, and a second controller splits the advance key between them.
-
-    Live mode leaves its presentation window open on purpose, so this fires
-    routinely between back-to-back demonstrations. The message therefore has to
-    say what to close rather than merely report a conflict.
+    Retain the existing single-presentation policy while controller key mappings
+    and PID-file locking remain title-based. Presentation effects themselves use
+    the owned window ID. Live mode deliberately leaves its window for questions.
     """
     if any(window.get("title") == TITLE for window in _windows()):
         raise SessionInUse(
@@ -162,7 +160,75 @@ def release_session() -> None:
 class Session:
     """The presentation window and the pseudo-terminal inside it."""
 
-    tty_path: Path
+    tty_path: Path | None = None
+    window_id: int | None = None
+    app_id: str = ""
+    control: Path | None = None
+
+    @property
+    def match(self) -> str:
+        if self.window_id is None:
+            raise RuntimeError("Presentation window identity is unavailable")
+        return f"id:{self.window_id}"
+
+    def receipt(self):
+        if self.control and (self.control / "finished").exists():
+            return json.loads((self.control / "finished").read_text())
+        return None
+
+    def check_recording(self):
+        receipt = self.receipt()
+        if self.control and receipt is not None:
+            raise RecordingError(f"Recorder exited before playback/finalization completed: {receipt}")
+
+    def wait_file(self, name: str, timeout: float = 10):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            path = self.control / name
+            if path.exists():
+                return json.loads(path.read_text())
+            if name != "finished":
+                self.check_recording()
+            if not any(w.get("id") == self.window_id for w in _windows()):
+                raise RecordingError(f"Presentation closed while waiting for recorder {name}")
+            time.sleep(.1)
+        raise RecordingError(f"Timed out waiting for recorder {name}")
+
+    def close_window(self):
+        # If the launch reply was lost, recover only this run's unique marker.
+        if self.window_id is None:
+            matches = [w for w in _windows() if w.get("user_vars", {}).get("kitty_demo") == self.app_id]
+            if len(matches) > 1:
+                raise RuntimeError("Ambiguous owned Presentation windows; refusing cleanup")
+            if not matches:
+                return
+            self.window_id = matches[0]["id"]
+        if any(w.get("id") == self.window_id for w in _windows()):
+            kitty("close-window", "--match", self.match)
+        deadline = time.monotonic() + 5
+        while any(w.get("id") == self.window_id for w in _windows()):
+            if time.monotonic() >= deadline:
+                raise RecordingError("Presentation did not close")
+            time.sleep(.1)
+
+    def dispose(self):
+        if self.control:
+            shutil.rmtree(self.control)
+            self.control = None
+
+    def abort(self):
+        if self.control:
+            (self.control / "stop").touch()
+            # Before start the supervisor has no child and can just be closed.
+            if (self.control / "start").exists() and self.receipt() is None:
+                try:
+                    self.wait_file("finished", 15)
+                except Exception as error:
+                    print(f"warning: recorder cleanup: {error}; state retained at {self.control}", file=sys.stderr)
+                    self.close_window()
+                    return
+        self.close_window()
+        self.dispose()
 
     @property
     def width(self) -> int:
@@ -208,81 +274,69 @@ def new_tty(before: set[Path]) -> Path:
 
 
 def launch(record: bool, cast: Path | None) -> Session:
-    """Open the presentation window and find the terminal inside it."""
+    """Own the window throughout startup and roll back partial launches."""
     if record and cast is None:
         raise ValueError("record mode needs an output path")
-    before = tty_paths()
-    arguments = [
-        "launch",
-        "--type=os-window",
-        f"--title={TITLE}",
-        "--spacing=margin=55",
-    ]
-    if record:
-        # Record into a plain shell, so the recording shows a terminal a
-        # student could reproduce rather than one carrying kitty's own prompt
-        # marks and cursor changes. `--env` cannot turn this off: kitty sets
-        # the variable itself from its configuration after applying `--env`,
-        # so it comes back as "enabled". Launching the shell through `env`
-        # sets it last and therefore wins.
-        shell = os.environ.get("SHELL", "/bin/bash")
-        arguments += ["--", "env", "KITTY_SHELL_INTEGRATION=disabled", shell, "-l"]
-    kitty(*arguments)
-
-    if os.environ.get("XDG_CURRENT_DESKTOP") == "niri":
-        time.sleep(1)
-        helper = (
-            Path(__file__).resolve().parent.parent / "niri-maximize_on_other_monitor.sh"
-        )
-        if helper.exists():
-            listing = subprocess.run(
-                ["niri", "msg", "--json", "windows"],
-                capture_output=True,
-                text=True,
-            )
-            for window in json.loads(listing.stdout or "[]"):
-                if window.get("title") == TITLE:
-                    subprocess.run([str(helper), str(window["id"])], check=False)
-                    break
-
-    if record:
-        # Snapshot only after the outer PTY exists, so the recorder's inner
-        # PTY is the one new device. Kitty's foreground processes cannot
-        # identify that inner terminal because it has its own process group.
-        time.sleep(0.5)
-        windows = [window for window in _windows() if window.get("title") == TITLE]
-        outer = _terminal_of(windows[0].get("pid", -1)) if windows else None
-        before = tty_paths()
-        if outer is None or outer not in before:
-            raise RuntimeError("could not identify the outer presentation terminal")
-        # Quote the destination. It comes from a command-file path, and a
-        # course checked out under a directory containing a space would
-        # otherwise split into several shell arguments.
-        send_text(
-            f"asciinema rec {shlex.quote(str(cast))} "
-            "--overwrite --window-size 120x24"
-        )
-        send_key("enter")
-        time.sleep(1.5)
-        # systemd's OSC context hooks the shell in two places and both have to
-        # go: `PROMPT_COMMAND+=(__systemd_osc_context_precmdline)` after each
-        # command, and `PS0` before each one. Its sequence carries the machine
-        # ID, the username, and the hostname. `unset` rather than assignment,
-        # because bash keeps PROMPT_COMMAND as an array and assigning would
-        # replace only its first element, leaving the rest running.
-        send_text("PS1='$ '; unset PROMPT_COMMAND PS0; clear")
-        send_key("enter")
-
-    time.sleep(0.5)
-    return Session(tty_path=new_tty(before))
+    if record and (not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal")):
+        raise RecordingError("Recording requires Linux pidfds and Python 3.9+")
+    session = Session(app_id="kitty-demo-" + uuid.uuid4().hex)
+    try:
+        if record:
+            session.control = Path(tempfile.mkdtemp(prefix="kitty-demo-record-"))
+        with Placement(session.app_id) as placement:
+            before = tty_paths()
+            arguments = ["launch", "--type=os-window", f"--title={TITLE}",
+                         "--spacing=margin=55", f"--os-window-class={session.app_id}",
+                         "--var", f"kitty_demo={session.app_id}"]
+            if record:
+                arguments += ["--", "env", "KITTY_SHELL_INTEGRATION=disabled",
+                              sys.executable, str(Path(__file__).with_name("recorder.py")),
+                              "supervise", str(session.control), str(cast)]
+            response = kitty(*arguments)
+            try:
+                session.window_id = int(response.stdout.strip())
+                if session.window_id <= 0:
+                    session.window_id = None
+                    raise ValueError("non-positive window ID")
+            except ValueError as error:
+                raise KittyConnectionError("Kitty launch returned an invalid window ID") from error
+            placement.finish()
+            if record:
+                session.wait_file("ready")
+                windows = [w for w in _windows() if w.get("id") == session.window_id]
+                outer = _terminal_of(windows[0].get("pid", -1)) if windows else None
+                before = tty_paths()
+                if outer is None or outer not in before:
+                    raise RecordingError("could not identify the outer presentation terminal")
+                (session.control / "start").touch()
+                session.wait_file("running")
+            # Preserve snapshot selection; retry only an empty difference.
+            deadline = time.monotonic() + 5
+            while not (tty_paths() - before) and time.monotonic() < deadline:
+                if record:
+                    session.check_recording()
+                time.sleep(.1)
+            session.tty_path = new_tty(before)
+            if record:
+                time.sleep(.5)  # Bash startup remains a timing assumption.
+                session.check_recording()
+                send_text("PS1='$ '; unset PROMPT_COMMAND PS0; clear", match=session.match)
+                send_key("enter", match=session.match)
+        return session
+    except BaseException:
+        try:
+            session.abort()
+        except Exception as cleanup:
+            print(f"warning: startup cleanup failed: {cleanup}", file=sys.stderr)
+        raise
 
 
-def send_text(text: str) -> None:
-    kitty("send-text", "--match", MATCH, "--", text)
+def send_text(text: str, *, match: str = MATCH) -> None:
+    kitty("send-text", "--match", match, "--", text)
 
 
-def send_key(key: str) -> None:
-    kitty("send-key", "--match", MATCH, "--", key)
+def send_key(key: str, *, match: str = MATCH) -> None:
+    kitty("send-key", "--match", match, "--", key)
 
 
 def draw_header(session: Session, lines: tuple[str, ...]) -> None:
@@ -309,28 +363,29 @@ def draw_header(session: Session, lines: tuple[str, ...]) -> None:
     for extra in lines[1:]:
         line(f"        {extra}")
     line(border)
-    send_key("enter")
+    send_key("enter", match=session.match)
 
 
 def perform(session: Session, step: Step) -> None:
     """Carry out one press."""
+    session.check_recording()
     if step.kind == "header":
         if step.clears:
-            send_text("clear")
-            send_key("enter")
+            send_text("clear", match=session.match)
+            send_key("enter", match=session.match)
             time.sleep(0.2)
         draw_header(session, step.lines)
     elif step.kind == "arm":
-        send_text(step.text)
+        send_text(step.text, match=session.match)
     elif step.kind == "run":
-        send_key("enter")
+        send_key("enter", match=session.match)
     elif step.kind == "send":
-        send_text(step.text)
+        send_text(step.text, match=session.match)
     elif step.kind == "key":
-        send_key(step.text)
+        send_key(step.text, match=session.match)
     elif step.kind == "end":
-        send_text(SENTINEL)
-        send_key("enter")
+        send_text(SENTINEL, match=session.match)
+        send_key("enter", match=session.match)
 
 
 class Requests:
@@ -398,22 +453,18 @@ def release_controller_window() -> None:
     sys.stdout.flush()
 
 
-def stop_recording() -> None:
-    """Close the presentation window, which ends the recording cleanly.
+def stop_recording(session: Session) -> None:
+    """End the recorded shell, wait for asciinema, then close the owned window."""
+    session.check_recording()
+    (session.control / "stop").touch()
+    receipt = session.wait_file("finished", 15)
+    if (receipt.get("returncode") != 0 or receipt.get("requested") is not True
+            or receipt.get("forced") is not False or receipt.get("error")):
+        raise RecordingError(f"Recorder did not finalize successfully: {receipt}")
+    session.close_window()
+    session.dispose()
 
-    kitty sends SIGHUP, and asciinema writes its events as they happen, so the
-    cast is complete and well formed. Closing the window also keeps the local
-    shell out of the recording entirely, because the session never returns to
-    it.
-    """
-    kitty("close-window", "--match", MATCH, check=False)
 
-
-def teardown(record: bool) -> None:
-    """End the demonstration.
-
-    Live mode closes nothing: the demonstration is normally followed by
-    questions, and the presentation window is the only place to answer them.
-    """
+def teardown(record: bool, session: Session) -> None:
     if record:
-        stop_recording()
+        stop_recording(session)

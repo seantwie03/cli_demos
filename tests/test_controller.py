@@ -81,7 +81,7 @@ class Playback(unittest.TestCase):
                 SimpleNamespace(record=record, pause=3),
                 Path("demo.sh"),
                 steps,
-                object(),
+                driver.Session(window_id=7),
             )
             return (
                 [call.args[1] for call in perform.call_args_list],
@@ -145,9 +145,9 @@ class Playback(unittest.TestCase):
             cursor.navigate("forward")
             cursor.navigate("back")
             draw.assert_not_called()
-            driver.perform(object(), steps[cursor.index])
-            text.assert_called_once_with("clear")
-            key.assert_called_once_with("enter")
+            driver.perform(driver.Session(window_id=7), steps[cursor.index])
+            text.assert_called_once_with("clear", match="id:7")
+            key.assert_called_once_with("enter", match="id:7")
             self.assertEqual(draw.call_args.args[1], ("Title", "detail"))
 
     def test_interrupt_and_eof_release_claim_without_closing_live_window(self):

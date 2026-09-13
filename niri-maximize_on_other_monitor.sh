@@ -1,22 +1,22 @@
 #!/bin/bash
-# Moves a window to the other monitor and maximizes it.
-# Usage: niri-maximize_on_other_monitor.sh [window-id]
-# If window-id is not provided, operates on the focused window.
-# Does nothing if not running under niri or only one monitor is connected.
-# Dependencies: jq
-
-[[ "$XDG_CURRENT_DESKTOP" == "niri" ]] || exit 0
-
-OTHER_OUTPUT=$(niri msg --json workspaces | jq -r '
-    (map(select(.is_focused))[0].output) as $cur |
-    map(select(.output != $cur))[0].output
-')
-
-if [[ -n "$1" ]]; then
-    ID_ARG="--id $1"
+# Move an identified window to a chosen output, then maximize its column.
+# Usage: niri-maximize_on_other_monitor.sh [window-id] [output]
+# Without arguments, use the focused window and next output by connector name.
+set -euo pipefail
+DESKTOP=${XDG_CURRENT_DESKTOP:-}
+[[ ":${DESKTOP,,}:" == *:niri:* ]] || exit 0
+WINDOW_ID=${1:-$(niri msg --json windows | jq -er '.[] | select(.is_focused) | .id')}
+TARGET_OUTPUT=${2:-}
+if [[ -z "$TARGET_OUTPUT" ]]; then
+    SOURCE_OUTPUT=$(niri msg --json workspaces | jq -r '.[] | select(.is_focused) | .output')
+    TARGET_OUTPUT=$(niri msg --json outputs | jq -er --arg source "$SOURCE_OUTPUT" '
+        [to_entries[] | select(.value.current_mode != null) | .key] | sort |
+        if length == 0 then error("no active outputs")
+        else .[((index($source) // -1) + 1) % length] end')
 fi
-
-if [[ -n "$OTHER_OUTPUT" && "$OTHER_OUTPUT" != "null" ]]; then
-    niri msg action move-window-to-monitor $ID_ARG "$OTHER_OUTPUT"
-fi
+niri msg action move-window-to-monitor --id "$WINDOW_ID" "$TARGET_OUTPUT"
+# Niri exposes maximize-column only for the focused column. Explicitly focus
+# the owned window first instead of maximizing whichever window launch focused.
+niri msg action focus-window --id "$WINDOW_ID"
+niri msg --json windows | jq -e --argjson id "$WINDOW_ID" '.[] | select(.id == $id and .is_focused)' >/dev/null
 niri msg action maximize-column
