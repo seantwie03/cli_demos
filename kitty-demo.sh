@@ -1,6 +1,12 @@
 #!/bin/bash
+#
+# DEPRECATED. kitty-demo.py replaces this script and is the supported
+# implementation; see the README. This file is kept only so an older
+# demonstration can still be replayed, and is not part of the documented
+# workflow.
+#
 
-CMD_FILE='/home/sean/s/cli_demos/./sample_command_file.sh'
+CMD_FILE='./sample_command_file.sh'
 
 if [ ! -f "$CMD_FILE" ]; then
   echo "Error: Command file not found at: $CMD_FILE" >&2
@@ -43,9 +49,9 @@ echo "Command file: $CMD_FILE"
 # I want section headers to be big and colorful. I want them to appear in the
 # terminal without having to echo them. When doing that, the echo command I
 # execute ends up taking as much space as the printed out header and it is
-# ugly. So... another hack. 
+# ugly. So... another hack.
 # First I capture all the pseudo terminals (/dev/pts/*).
-# Then I spawn the Presentation terminal. 
+# Then I spawn the Presentation terminal.
 # Then I capture all the pseudo terminals again. I assume the new pts device
 # is the Presentation terminal.
 # Now that I know which pts device is the Presentation terminal, I can input
@@ -64,8 +70,8 @@ if [[ "$XDG_CURRENT_DESKTOP" == "niri" ]]; then
     "$(dirname "$0")/niri-maximize_on_other_monitor.sh" "$PRES_WIN_ID"
 fi
 if command -v asciinema >/dev/null 2>&1 ; then
-    #kitty @ send-text --match 'title:^Presentation$' -- "asciinema rec /tmp/$(basename ${CMD_FILE%.*}.cast) --overwrite --window-size 120x25"
-    kitty @ send-text --match 'title:^Presentation$' -- "asciinema rec /tmp/$(basename ${CMD_FILE%.*}.cast) --overwrite"
+    kitty @ send-text --match 'title:^Presentation$' -- "asciinema rec /tmp/$(basename ${CMD_FILE%.*}.cast) --overwrite --window-size 120x24"
+    #kitty @ send-text --match 'title:^Presentation$' -- "asciinema rec /tmp/$(basename ${CMD_FILE%.*}.cast) --overwrite"
     kitty @ send-key --match 'title:^Presentation$' enter
 fi
 
@@ -114,6 +120,15 @@ while (( i < ${#lines[@]} )); do
   # Trim leading whitespace to make parsing resilient
   trimmed_cmd="${cmd#"${cmd%%[![:space:]]*}"}"
 
+  if [[ "$trimmed_cmd" == '#@'* ]]; then
+    # Engine directives belong to the Python driver. Skip them here so a
+    # command file that already carries them is not broken in a live class by
+    # having the directive typed into the presentation window.
+    ((i++))
+    preview_next_command
+    continue
+  fi
+
   if [[ "$trimmed_cmd" == '#!'* ]]; then
     # Presenter note: echo to this terminal and move to the next command immediately.
     echo "Note: ${trimmed_cmd#\#!}"
@@ -152,7 +167,7 @@ while (( i < ${#lines[@]} )); do
       # Trim leading whitespace to make parsing more resilient
       trimmed_line="${line#"${line%%[![:space:]]*}"}"
 
-      if [[ "$trimmed_line" == '#'* && "$trimmed_line" != '#^'* && "$trimmed_line" != '#!'* ]]; then
+      if [[ "$trimmed_line" == '#'* && "$trimmed_line" != '#^'* && "$trimmed_line" != '#!'* && "$trimmed_line" != '#@'* ]]; then
         sub_line_text="        ${trimmed_line#\# }"
         print_line_and_wrap "$sub_line_text" "$HEADER_COLOR"
         ((i++))

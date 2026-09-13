@@ -2,104 +2,294 @@
 
 Many of us in the IT industry have probably had professors that type very, very slowly. Or worse, professors that make a lot of typos. Those can really throw off a demonstration as the professor has to go into troubleshooting mode to figure out why their command didn't work. This project was created to avoid all these problems.
 
-Simply create a "command file" with all the commands that will be ran during the demonstration. During the demo, use a custom keyboard shortcut to read the command file and put the next command on the prompt as if it was typed in by hand. Explain the command to the audience and hit `enter` to execute it. Repeat until the demonstration is complete.
+Write a "command file" listing every command the demonstration runs. During the
+demo, one key puts the next command on the prompt as if it had been typed by
+hand. Explain it to the audience, press the same key again to run it, and repeat
+until the demonstration is complete. The terminal stays fully live the whole
+time, so a question can always be answered with an ad-hoc command.
 
 [![asciicast](https://asciinema.org/a/706500.svg)](https://asciinema.org/a/706500)
 
 To see a sped up demonstration using this tool check my [Asciinema profile](https://asciinema.org/~sean-twie03).
 
-## Setup and Usage
+## Setup
 
-1. Download the [kitty-demo.sh](./kitty-demo.sh) script.
-2. Add the following maps to your `kitty.conf`.
-    ```kitty.conf
-    # Starts the demo script in the current window. Becomes the "Controller" window.
-    # Also launches the Presentation window
-    map kitty_mod+p launch --cwd=current --title=Controller sh /path/to/kitty-demo.sh
+Requires [Kitty](https://sw.kovidgoyal.net/kitty/) and Python 3. There is
+nothing to install; the package has no third-party dependencies.
 
-    # Advances the demo by sending an 'enter' keypress to the Controller which triggers
-    # the script running inside the controller window to send the next line from 
-    # the CMD_FILE to the Presentation window
-    map f1 remote_control send-key --match 'title:Controller' enter
-    ```
-3. Write a [command file](#command-file-syntax) with all the commands that will be ran during the demo.
-4. Specify your command file by updating the `CMD_FILE` variable at the top of the [kitty-demo.sh](./kitty-demo.sh) script.
-5. Start the demonstration by pressing `kitty_mod+p` (e.g., `Cmd+p` on macOS or `Ctrl+Shift+p` on Linux) in any Kitty window. This will create a "Controller" window where private presenter notes will appear. A new "Presentation" window will also appear. This is where your demo takes place. You can `ssh` to a remote host from this window, if needed.
-6. Run the Demonstration by pressing `F1` to process the next line from your command file. This will either display a header or place the next command on the prompt in the Presentation window. The terminal remains fully interactive for any ad-hoc commands.
+1. Clone this repository, and put `kitty-demo.py` somewhere on your `PATH`:
 
-If you don't want to use the Kitty terminal, checkout the [other implementations](#other-implementations) that have more limitations, but their only requirement is Bash.
+   ```
+   ln -s /path/to/cli_demos/kitty-demo.py ~/bin/kitty-demo
+   ```
 
-## Mechanism
+2. Add the presentation controls to your `kitty.conf`, then reload it:
 
-This implementation utilizes [Kitty's remote control](https://sw.kovidgoyal.net/kitty/overview/#remote-control) capability to orchestrate the demonstration across multiple windows.
+   ```kitty.conf
+   # F1 back, F2 performs the selected action, F3 forward.
+   map f1 remote_control send-text --match 'title:Controller' 'back\n'
+   map f2 remote_control send-key --match 'title:Controller' enter
+   map f3 remote_control send-text --match 'title:Controller' 'forward\n'
+   map --when-focus-on title:^Controller$ page_up remote_control send-text --match 'title:Controller' 'scroll-up\n'
+   map --when-focus-on title:^Controller$ page_down remote_control send-text --match 'title:Controller' 'scroll-down\n'
+   ```
 
-* The system uses two Kitty windows:
-    * The Controller window runs the main `kitty-demo.sh` script, which reads the command file, displays private presenter notes, and shows a preview of the next action so you always know what is coming next.
-    * The Presentation window is where the audience sees the action. The script sends commands and headers to this window.
+   `allow_remote_control yes` must also be set. There is no mapping to start a
+   demonstration: the script names its own window `Controller` when it runs, so
+   it can be started by hand from any Kitty window.
 
-* The kitty-demo.sh script acts as the central controller. It waits for input and uses `kitty @ send-text` to write commands to the Presentation window's prompt.
+3. Write a [command file](#command-file-syntax).
+4. Run it, then press your advance key to step through it.
 
-* The F1 keybinding simply sends an enter keypress to the Controller window. The read command inside the `kitty-demo.sh` script receives this keypress, which triggers it to process and send the next line from the command file.
+```
+kitty-demo path/to/command_file.sh            # live, for class
+kitty-demo --record path/to/command_file.sh   # unattended, writes a .cast
+kitty-demo --check path/to/command_file.sh    # validate only
+```
 
-## Command File Syntax
-The command file is a simple text file where each line is processed one by one. At the top of [kitty-demo.sh](./kitty-demo.sh) is a `CMD_FILE` variable. Modify this variable if you want to specify a different command file.
+The window you start it in becomes the Controller for the duration and gets
+its title and your prompt back when the demonstration ends. Open a split first
+if you want to keep a shell alongside it.
 
-* **Headers**: Lines starting with `#^` are treated as section headers. The script will display them in a formatted block in the presentation terminal. Any subsequent lines starting with a plain `#` are considered part of that header.
-    ```
-    #^ This is a header
-    # This is part of a more detailed description
-    ```
-* **Presenter Notes**: Lines starting with `#!` are presenter notes. They are echoed only in the "Controller" window for you to see.
-    ```
-    #! Give the audience a pnumonic for each command, flag and argument!
-    ```
-* **Commands**: Any other line is treated as a shell command to be typed into the prompt of the "Presentation" window.
-    ```
-    ls -l
-    echo "Hello, World!"
-    ```
+For `--record` started from outside a Kitty window, `kitty.conf` also needs
+`listen_on`, for example `listen_on unix:@kitty`. Inside a Kitty window it
+works without that.
 
-**Example**: [sample_command_file.sh](./sample_command_file.sh)
+## How it works
+
+Two windows. The **Controller** is the window you started the script in: it
+shows what the next press will do and displays presenter notes the audience
+never sees. The **Presentation** window is opened by the script and is what the
+audience watches.
+
+The advance key is a Kitty mapping that sends Enter to the Controller. The
+script reads it and drives the Presentation window over [Kitty's remote
+control](https://sw.kovidgoyal.net/kitty/overview/#remote-control), so it works
+after `sudo`, across `ssh`, and inside full-screen programs such as `vim` and
+`less`.
+
+F2 does all normal advancement: the first press puts a command on the prompt,
+the second runs it. A section header takes one press; presenter notes take none.
+
+### The Controller display
+
+The Controller uses the terminal's full available height and adapts when you
+resize it. The list aims to show five items before and five after the current
+item. Commands occupy one row through both typing and submission; headers are
+also selectable items. Only the selected row has an action label, in the left
+column.
+
+```
+sample_command_file.sh · item 5/17 · line 10
+──────────────────────────────────────────────────────────────────────
+          HEADER: 1. Inspect the current working directory
+          NOTE: Explain what the working directory means.
+          pwd
+ [ENTER]  ls
+          HEADER: 2. Inspect a different directory
+          ls /etc/
+          clear
+```
+
+The left-hand label says what the next F2 press will do: `[TYPE]`, `[ENTER]`, `[SEND]`
+(keystrokes without Enter), `[SHOW]` (a header), `[CLEAR+SHOW]` (a header with
+merged clear), or `[END]`. After typing a command, the label stays beside it and
+changes to `[ENTER]`. After submission, the label moves to the next item.
+The status shows the command file, selected item, and source line. Record mode
+adds `REC` and elapsed time; its playback sequence and pauses are unchanged.
+
+**HEADER:** rows show only the first header line, shortened with an ellipsis
+when necessary. F2 still draws the complete header in the Presentation window.
+A merged `clear` is part of that header, not a separate list item.
+
+**NOTE:** rows appear immediately before their associated item, so you can see
+them coming and decide when to speak. Notes wrap and are never truncated. They
+remain with the command during both typing and submission. When space is tight,
+the HUD removes whole surrounding items and their notes, starting with the
+farthest previous items. If the current note exceeds the screen, focus the
+Controller and use PageUp/PageDown to read it. The selected command stays pinned
+when there is room, and scrolling never advances the demo. These
+[conditional mappings](https://sw.kovidgoyal.net/kitty/mapping/) leave those keys
+unchanged in the Presentation window.
+
+### Revisiting commands and answering questions
+
+F1 selects backward; F3 selects forward. These keys only change the
+Controller selection: they do not type, execute, clear input, or undo anything
+in the Presentation window. Headers participate in navigation just like commands.
+Earlier list items mean earlier in the file, not necessarily already executed.
+
+While `[ENTER]` is pending, F1 resets the current command to `[TYPE]`.
+Pressing F1 again selects the preceding item, like restarting a song and
+then going to the previous song. F3 skips to the following item from either
+phase.
+
+For example, if a question arrives after F2 types `pwd`, cancel that input in
+the Presentation window and run your ad-hoc commands. Return to an empty prompt,
+press F1 to select `pwd` for retyping, then use F2 twice to type and run it.
+If you already ran it manually, F3 skips the pending submission. You remain
+responsible for restoring the expected prompt or editor state before resuming.
+
+At completion, F2 returns to your original Controller shell; F1 revisits
+the last item. Ctrl-C in the Controller also exits, and closed input stops it
+without advancing. Terminal settings and the previous screen/title are restored.
+The live Presentation window remains open for questions.
+
+**Only one demonstration runs at a time.** Both windows are found by a fixed
+title, and Kitty applies a remote-control command to every window that matches,
+so a second session would send commands to the previous demonstration's window
+and split the advance key between two controllers. Starting a second one fails
+with a message naming the window to close. Live mode leaves its Presentation
+window open on purpose, so this is normal between back-to-back demonstrations:
+close it with `ctrl+alt+w` and start the next one.
+
+## Command file syntax
+
+Each line is processed in order.
+
+| Line          | Meaning                                                        |
+| ------------- | -------------------------------------------------------------- |
+| `#^ Title`    | Section header, drawn full width in the Presentation window     |
+| `#   detail`  | Header continuation, audience visible, until a command intervenes |
+| `#! note`     | Presenter note, displayed in Controller window only                 |
+| `#@ ...`      | Directive for the script, never displayed                       |
+| anything else | Typed into the Presentation window                              |
+
+```sh
+#^ Inspect a file system
+#   Host: servera
+#! Give the audience a mnemonic for each command
+pwd
+ls -l
+```
+
+A bare `clear` immediately before a section header is merged into it, so a
+section transition costs one press rather than three.
+
+A `#` line means one of two things, and the line before it decides which. A
+section header claims every `#` line that follows it, however the block is
+spaced, so all of these are header text:
+
+```sh
+#^ Configure the service
+#   Host: servera
+#   Goal: serve a page
+```
+
+A command closes the section. After one, a `#` line is typed into the
+Presentation window like any other line, which is what you want for a comment
+the audience should read and for a commented line going into a config file:
+
+```sh
+sudo -i
+# Everything below runs as root
+vim /etc/motd
+#@ noenter
+i
+# Managed by the IT-230 class
+```
+
+Use `#!` for a comment the audience should not see.
+
+
+### Directives
+
+| Directive    | Effect                                                |
+| ------------ | ----------------------------------------------------- |
+| `#@ pause N` | Hold N seconds after the next step. Record mode only.  |
+| `#@ noenter` | The next line is keystrokes; send no Enter after it.   |
+
+Both must be followed by the step they apply to.
+
+**Why `#@ noenter` exists.** Every line gets an Enter unless it says
+otherwise. That is right at a shell prompt, and right for most lines inside an
+editor too, because there the Enter is the newline: a body line being inserted
+needs one, and so does `jj:wq`. The exceptions are keystrokes that finish the
+moment they arrive, such as `q` leaving a pager or `dd` deleting a line. Those
+need marking, or the Enter lands somewhere it was not wanted.
+
+```sh
+less /var/log/cron
+#@ noenter
+G
+#@ noenter
+q
+ls -l /tmp
+```
+
+Nothing tries to detect where an editor starts and ends. That needs a
+heuristic wrong often enough to be worse than the default, and the default is
+already right for the large majority of lines. To find the exceptions in
+existing files:
+
+```
+tools/suggest_noenter.py path/            # show suggestions
+tools/suggest_noenter.py path/ --apply    # insert them
+```
+
+It reads line shape only, so review what it proposes. Playing the exercise
+back is what proves the result.
+
+## Validating command files
+
+```
+kitty-demo.py --check path/to/command_file.sh   # one file
+tools/validate_command_files.py path/           # a whole directory
+```
+
+Both use the same rules, so a file that passes one passes the other. They exit
+nonzero when a file fails to parse.
+
+Validation is not something you have to remember. Every run parses the command
+file first and refuses to go further if it cannot, before a window opens, a
+session is claimed, or a recording starts. `--check` is the same validation on
+its own, for when you want it without starting a demonstration.
+
+## Development
+
+Every script carries a shebang and is executable, so they run directly. To
+reach them from anywhere, put one symlink on your `PATH`:
+
+```
+ln -s ~/s/cli_demos/kitty-demo.py ~/bin/kitty-demo
+```
+
+Python resolves the symlink when locating the package, so the import works
+through it.
+
+```
+python3 -m unittest discover -s tests -t .
+```
+
+`sample_command_file.sh` doubles as a worked example and as the fixture the
+focused tests exercise.
 
 ## Thanks
 
 Thanks to [Kovid Goyal](https://sw.kovidgoyal.net/kitty/support/) for making such an awesome terminal program!
 
-## Other Implementations
+## Other implementations
 
-This repo has three branches. Each branch uses different technology to accomplish the stated goal above.
+`kitty-demo.sh` is the original Bash implementation. It is **deprecated** and
+kept only so an older demonstration can still be replayed; `kitty-demo.py`
+replaces it. It does not support directives, one-key advancing, record mode, or
+validation, and it writes its recordings under `/tmp`.
+
+Two further variants live on other branches. Both are simpler and need only
+Bash, at the cost of real limitations.
 
 ### Readline
 
 **Branch**: [readline](https://github.com/seantwie03/cli_demos/tree/readline?tab=readme-ov-file)
 
-**Complexity**: Low
-
-#### Details
-
-Uses Bash functions to manipulte `readline`. Very simple implementation.
-
-This implementation does not work when escalating to `root` or switching users. Does not work in Text User Interfaces (TUIs) like `vim` or `parted`.
+Uses Bash functions to manipulate `readline`. Very simple. Does not work when
+escalating to `root` or switching users, and does not work in full-screen
+programs such as `vim` or `parted`.
 
 ### Readline Multi-User
 
 **Branch**: [readline-multi-user](https://github.com/seantwie03/cli_demos/tree/readline-multi-user?tab=readme-ov-file)
 
-**Complexity**: Moderate
-
-#### Details
-
-Similar to `readline` but accessible to every user on the system. The keyboard shorcut will continue to work when escalating to `root` or switching users.
-
-Does not work in TUIs like `vim` or `parted`.
-
-### Main
-
-**Branch**: [main](https://github.com/seantwie03/cli_demos)
-
-**Complexity**: High
-
-#### Details
-
-A more complicated solution that utilizes Kitty's remote control capability. This implementation allows usage of the presenter notes. It works when escalating to `root` and switching users. It also works in TUIs like `vim` and `parted`. Requires the [Kitty](https://sw.kovidgoyal.net/kitty/) Terminal which only runs on Mac, Linux, and [WSLg](https://learn.microsoft.com/en-us/windows/wsl/tutorials/gui-apps).
-
+Similar, but available to every user on the system, so the keyboard shortcut
+keeps working after escalating to `root` or switching users. Still does not work
+in full-screen programs.
