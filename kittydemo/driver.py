@@ -58,6 +58,10 @@ class SessionInUse(RuntimeError):
     """Another demonstration is already running."""
 
 
+class KittyConnectionError(RuntimeError):
+    """Kitty could not provide a usable remote-control response."""
+
+
 def kitty(*arguments: str, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["kitty", "@", *arguments], check=check, capture_output=True, text=True
@@ -65,21 +69,38 @@ def kitty(*arguments: str, check: bool = True) -> subprocess.CompletedProcess:
 
 
 def _windows() -> list[dict]:
-    """Every kitty window, or an empty list if kitty cannot be reached."""
+    """Every Kitty window; failed requests must not look like an empty instance."""
+    endpoint = os.environ.get("KITTY_LISTEN_ON")
+    target = (
+        f"Kitty at KITTY_LISTEN_ON={endpoint!r}"
+        if endpoint else
+        "Kitty via the controlling terminal (outside Kitty, set KITTY_LISTEN_ON "
+        "to the intended instance's socket address)"
+    )
     try:
         listing = kitty("ls")
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return []
+    except OSError as error:
+        raise KittyConnectionError(f"Could not invoke kitty for {target}: {error}") from error
+    except subprocess.CalledProcessError as error:
+        detail = (error.stderr or "").strip() or f"exit status {error.returncode}"
+        raise KittyConnectionError(f"Could not reach {target}: {detail}") from error
     try:
-        tree = json.loads(listing.stdout or "[]")
-    except json.JSONDecodeError:
-        return []
-    return [
-        window
-        for entry in tree
-        for tab in entry.get("tabs", [])
-        for window in tab.get("windows", [])
-    ]
+        tree = json.loads(listing.stdout)
+        if not isinstance(tree, list):
+            raise ValueError("expected a list of OS windows")
+        windows = []
+        for entry in tree:
+            if not isinstance(entry, dict) or not isinstance(entry.get("tabs"), list):
+                raise ValueError("expected an OS window with a tabs list")
+            for tab in entry["tabs"]:
+                if not isinstance(tab, dict) or not isinstance(tab.get("windows"), list):
+                    raise ValueError("expected a tab with a windows list")
+                if any(not isinstance(window, dict) for window in tab["windows"]):
+                    raise ValueError("expected window objects")
+                windows.extend(tab["windows"])
+        return windows
+    except (ValueError, TypeError) as error:
+        raise KittyConnectionError(f"Invalid window listing from {target}: {error}") from error
 
 
 def _process_alive(pid: int) -> bool:

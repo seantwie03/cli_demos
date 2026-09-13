@@ -23,9 +23,13 @@ nothing to install; the package has no third-party dependencies.
    ln -s /path/to/cli_demos/kitty-demo.py ~/bin/kitty-demo
    ```
 
-2. Add the presentation controls to your `kitty.conf`, then reload it:
+2. Add these settings and presentation controls to your `kitty.conf`, then start
+   a new Kitty instance (reloading does not apply `listen_on`):
 
    ```kitty.conf
+   allow_remote_control socket-only
+   listen_on unix:${XDG_RUNTIME_DIR}/kitty-demo-{kitty_pid}
+
    # F1 back, F2 performs the selected action, F3 forward.
    map f1 remote_control send-text --match 'title:Controller' 'back\n'
    map f2 remote_control send-key --match 'title:Controller' enter
@@ -34,8 +38,14 @@ nothing to install; the package has no third-party dependencies.
    map --when-focus-on title:^Controller$ page_down remote_control send-text --match 'title:Controller' 'scroll-down\n'
    ```
 
-   `allow_remote_control yes` must also be set. There is no mapping to start a
-   demonstration: the script names its own window `Controller` when it runs, so
+   This setup uses the private `$XDG_RUNTIME_DIR` supplied by a Linux desktop
+   login session. No directory creation, login scripts, or manual environment
+   exports are needed inside Kitty. Kitty creates the pathname Unix socket and
+   passes its address to child processes as `KITTY_LISTEN_ON`. Socket access
+   permits control of the instance; the private directory restricts other users,
+   but does not isolate processes running as your own user.
+
+   There is no mapping to start a demonstration: the script names its own window `Controller` when it runs, so
    it can be started by hand from any Kitty window.
 
 3. Write a [command file](#command-file-syntax).
@@ -51,9 +61,26 @@ The window you start it in becomes the Controller for the duration and gets
 its title and your prompt back when the demonstration ends. Open a split first
 if you want to keep a shell alongside it.
 
-For `--record` started from outside a Kitty window, `kitty.conf` also needs
-`listen_on`, for example `listen_on unix:@kitty`. Inside a Kitty window it
-works without that.
+For optional `--record` invocation outside Kitty, obtain the intended instance's
+address by running `printf '%s\n' "$KITTY_LISTEN_ON"` in one of its shells.
+Pass that complete address to the external caller, for example:
+
+```sh
+KITTY_LISTEN_ON='unix:/run/user/1000/kitty-demo-12345' kitty @ ls
+KITTY_LISTEN_ON='unix:/run/user/1000/kitty-demo-12345' kitty-demo --record path/to/command_file.sh
+```
+
+The user ID and PID above are examples; use the actual reported address and
+refresh it after restarting Kitty. Do not select an arbitrary socket when
+multiple instances exist. Schedulers also need this address and a running
+Kitty instance. Interactive live mode should start inside Kitty so the
+Controller receives its mapped keys. An unavailable endpoint produces a
+startup error; `--check` works without Kitty.
+
+With `socket-only`, both `send-key` and `send-text` use the inherited socket
+address; terminal remote-control requests are denied. See [Kitty listener
+configuration](https://sw.kovidgoyal.net/kitty/conf/#opt-kitty.listen_on) and
+[socket invocation](https://sw.kovidgoyal.net/kitty/remote-control/#remote-control-via-a-socket).
 
 ## How it works
 

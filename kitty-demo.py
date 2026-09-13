@@ -182,6 +182,9 @@ def _main(argv: list[str]) -> int:
 def main(argv: list[str]) -> int:
     try:
         return _main(argv)
+    except driver.KittyConnectionError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     except KeyboardInterrupt:
         print("\nDemo interrupted.", file=sys.stderr)
         return 130

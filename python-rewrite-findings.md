@@ -2,7 +2,7 @@
 
 Reviewed the working tree on 2026-09-12, including the Python entry point, package, tools, tests, README, and changes to the original Bash script. Updated on 2026-09-13 after implementing Findings 2 and 4 together, following Finding 1's snapshot-based fix. Original diagnoses and design proposals are retained as history; older numeric source references may have shifted with the implementation.
 
-**Current status:** Finding 1 is fixed within the accepted snapshot/timing limitations. Finding 2 is fixed. Finding 4 now has the agreed explicit navigation/recovery workflow and full-height HUD; manual terminal state remains the presenter's responsibility. Finding 5 is partially addressed. Findings 3 and 6–12 remain open. The smaller display-content issue is resolved, and several documentation/completion messages were corrected with the HUD update.
+**Current status:** Finding 1 is fixed within the accepted snapshot/timing limitations. Finding 2 is fixed. Finding 4 now has the agreed explicit navigation/recovery workflow and full-height HUD; manual terminal state remains the presenter's responsibility. Finding 5 is partially addressed. Findings 3, 6–7, 9–10, and 12 remain open. Finding 8 is resolved, and Finding 11 now has the documented socket setup and explicit startup errors. The smaller display-content issue is resolved, and several documentation/completion messages were corrected with the HUD update.
 
 ## Overall assessment
 
@@ -321,15 +321,49 @@ produces a header containing only `Title`, then a separate type/run pair for `# 
 
 **Recommendation:** Either retain explicit header-block state across invisible lines and define directive binding there, or document that continuations must be contiguous apart from blank lines. The latter is smaller if this placement is unnecessary. Do not claim the broader rule without implementing and testing it.
 
-### 11. P2 — The documented outside-Kitty invocation lacks a remote-control address
+### 11. Addressed (originally P2) — The documented outside-Kitty invocation lacked a remote-control address
 
-**Location:** `README.md:50–52`; `kittydemo/driver.py:68–71`.
+**Current implementation:** `README.md`, `kittydemo/driver.py`, and `kitty-demo.py`. The diagnosis below describes the previous setup and error handling.
 
 Adding `listen_on` in Kitty's configuration only creates a listening endpoint. An external caller still needs `--to` or `KITTY_LISTEN_ON` identifying it. The wrapper supplies neither explicitly, and an unrelated terminal/scheduler does not automatically inherit Kitty's environment. The documented setup therefore fails for that caller unless the environment was configured separately.
 
 The installed Kitty help confirms the lookup order: explicit address, environment, then controlling terminal. See [remote control via a socket](https://sw.kovidgoyal.net/kitty/remote-control/#remote-control-via-a-socket).
 
 **Recommendation:** Document an invocation setting `KITTY_LISTEN_ON` to the actual configured endpoint, or scope the initial supported workflow to launching inside Kitty. There is no need to add another CLI flag if the existing environment mechanism suffices. Also let `_windows()` distinguish an unreachable Kitty instance from a successful empty listing rather than swallowing the useful error.
+
+#### Implemented plan: explicit Unix-domain socket endpoint
+
+**Status:** Implemented. The README now documents the two-line pathname-socket setup and explicit external invocation. `_windows()` raises `KittyConnectionError` for invocation failures, rejected/unreachable endpoints, and invalid listings; the CLI reports it with status 1 and no traceback. The subprocess wrapper retains environment inheritance, so no transport flag or new socket implementation was needed. The implementation contract below is retained for reference.
+
+**Verification:** All 97 automated tests pass. Five added tests cover real subprocess environment inheritance for both send functions with and without an endpoint, valid and invalid listings, missing executables, denied/refused connections, startup failure before claiming a session or launching a window, and Kitty-independent `--check`. Failed requests are attempted only once. `git diff --check` passes. No user Kitty configuration was changed. A graphical socket-only rehearsal and cross-account permission check remain unperformed; the automated inheritance test uses a temporary executable, not a running Kitty server.
+
+Prefer a **pathname Unix-domain socket in a user-owned directory with mode `0700`**. This avoids network exposure and gives Linux filesystem permissions a role in restricting access. The current `unix:@kitty` example is also a Unix socket, but uses Linux's abstract namespace, where filesystem permissions do not apply. This is a better default for local control, not protection against other processes running as the same user or root. See [Linux Unix-domain socket permissions](https://man7.org/linux/man-pages/man7/unix.7.html).
+
+1. **Keep installation to two Kitty configuration lines.** Place the socket directly in the existing private `$XDG_RUNTIME_DIR` provided by the desktop login session. Alongside the existing presentation key mappings, use this configuration:
+
+   ```kitty.conf
+   allow_remote_control socket-only
+   listen_on unix:${XDG_RUNTIME_DIR}/kitty-demo-{kitty_pid}
+   ```
+
+   No directory-creation commands, login hooks, wrapper scripts, or manual environment exports are required for normal inside-Kitty use: Kitty creates the socket and supplies `KITTY_LISTEN_ON` to its child processes. This assumes the supported Linux desktop session already provides a valid, user-owned runtime directory with mode `0700`; do not silently substitute a shared `/tmp` pathname. Start a new Kitty instance after changing `listen_on`, because reload does not apply it. Kitty expands environment variables and replaces `{kitty_pid}`; without that placeholder it appends a PID suffix anyway. `socket-only` accepts socket requests and denies terminal remote-control requests. See [Kitty listener configuration](https://sw.kovidgoyal.net/kitty/conf/#opt-kitty.listen_on) and [remote-control permissions](https://sw.kovidgoyal.net/kitty/conf/#opt-kitty.allow_remote_control). Replace the README's blanket `allow_remote_control yes` requirement for this socket workflow, and verify the existing local key mappings during rehearsal.
+
+2. **Document explicit targeting for optional outside-Kitty invocation.** This is a per-invocation requirement for an external caller, not an additional installation step. Normal live and record runs started inside Kitty inherit the endpoint automatically. In a shell inside the intended Kitty instance, run `printf '%s\n' "$KITTY_LISTEN_ON"`. Copy that complete address, including the PID, into the external caller's environment. For example, if the reported address is `unix:/run/user/1000/kitty-demo-12345`:
+
+   ```sh
+   KITTY_LISTEN_ON='unix:/run/user/1000/kitty-demo-12345' \
+       kitty @ ls
+   KITTY_LISTEN_ON='unix:/run/user/1000/kitty-demo-12345' \
+       kitty-demo --record path/to/command_file.sh
+   ```
+
+   Label those numbers as examples. Refresh the address after restarting Kitty; never choose the first socket from a glob when multiple instances exist. A scheduler must receive the address explicitly and run while that desktop Kitty instance is available. Scope the outside-Kitty example to unattended `--record`; interactive live mode still needs its Controller inside Kitty for the mapped keys. The existing environment mechanism suffices, with no new CLI flag or socket discovery service. See [Kitty socket invocation](https://sw.kovidgoyal.net/kitty/remote-control/#remote-control-via-a-socket).
+
+3. **Keep transport selection centralized.** Retain `kitty()` as the subprocess boundary and let Kitty consume inherited `KITTY_LISTEN_ON` on every call. An explicitly configured but unreachable endpoint must fail without retrying through another instance or the controlling terminal. Preserve the existing inside-Kitty terminal transport when no endpoint is set and the user's configuration permits it; the proposed `socket-only` setup requires the listener even inside Kitty. Do not create, delete, or replace Kitty's socket from the demo controller.
+
+4. **Make startup failures actionable.** Change `_windows()` so only a successful, valid empty listing returns `[]`. Missing Kitty, connection/permission failures, and empty or malformed JSON must produce a clear error. Preserve useful subprocess stderr and identify the selected endpoint when present; otherwise explain that external callers need `KITTY_LISTEN_ON`. Use the existing pre-launch session check to fail before claiming the session or creating a Presentation window, and report the failure through the CLI without a traceback. Keep `--check` independent of Kitty.
+
+5. **Verify routing and failure behavior.** Add focused tests for endpoint inheritance, permitted inside-Kitty invocation without an endpoint, valid empty listings, missing executables, unreachable/denied sockets, and invalid responses. Assert that startup failures create neither a session claim nor a Presentation window and that an explicit failed endpoint is never replaced. Rehearse with an isolated Kitty instance configured with only the two new lines and the existing key mappings: inside-Kitty live and record runs inherit the endpoint without manual setup, external `ls` and a harmless recording reach that instance, and F1/F2/F3 plus scrolling still work inside it with `socket-only`. Inspect directory ownership/mode and confirm another unprivileged account cannot connect. Keep recorder-finalization fixes under Finding 6 and window-ID targeting under Finding 9.
 
 ### 12. P2 — Long header lines break the following line's alignment
 

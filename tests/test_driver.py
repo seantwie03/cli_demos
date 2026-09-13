@@ -2,12 +2,56 @@
 
 import os
 import pty
+import subprocess
+import tempfile
 import unittest
 from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
 from kittydemo import driver
+
+
+class RemoteControl(unittest.TestCase):
+    def test_send_commands_inherit_endpoint_without_transport_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "kitty"
+            executable.write_text('#!/bin/sh\nprintf "%s\\n" "${KITTY_LISTEN_ON-unset}" "$@"\n')
+            executable.chmod(0o700)
+            for endpoint in (None, "unix:/run/user/1000/kitty-demo-12345"):
+                with self.subTest(endpoint=endpoint), patch.dict(os.environ, {"PATH": directory}):
+                    os.environ.pop("KITTY_LISTEN_ON", None)
+                    if endpoint:
+                        os.environ["KITTY_LISTEN_ON"] = endpoint
+                    original = driver.kitty
+                    with patch.object(driver, "kitty") as invoke:
+                        # Capture the actual child's response through the real wrapper.
+                        results = []
+                        invoke.side_effect = lambda *args: results.append(original(*args))
+                        driver.send_key("enter")
+                        driver.send_text("hello")
+                    for result, command in zip(results, ("send-key", "send-text")):
+                        self.assertEqual(result.stdout.splitlines()[:3],
+                                         [endpoint or "unset", "@", command])
+
+    def test_valid_listings(self):
+        for payload, expected in (("[]", []), ('[{"tabs": [{"windows": [{"id": 7}]}]}]', [{"id": 7}])):
+            with self.subTest(payload=payload), patch.object(driver, "kitty", return_value=subprocess.CompletedProcess([], 0, payload)):
+                self.assertEqual(driver._windows(), expected)
+
+    def test_failed_or_invalid_listing_never_looks_empty(self):
+        errors = [FileNotFoundError("kitty missing"),
+                  subprocess.CalledProcessError(1, ["kitty"], stderr="Permission denied"),
+                  subprocess.CalledProcessError(1, ["kitty"], stderr="Connection refused")]
+        for error in errors:
+            with self.subTest(error=error), patch.dict(os.environ, {"KITTY_LISTEN_ON": "unix:/missing"}), patch.object(driver, "kitty", side_effect=error) as invoke:
+                with self.assertRaisesRegex(driver.KittyConnectionError, "unix:/missing"):
+                    driver._windows()
+                invoke.assert_called_once_with("ls")
+        for payload in ("", "bad json", "null", "{}", "[{}]", '[{"tabs": [null]}]', '[{"tabs": [{"windows": [1]}]}]'):
+            with self.subTest(payload=payload), patch.object(driver, "kitty", return_value=subprocess.CompletedProcess([], 0, payload)):
+                with self.assertRaisesRegex(driver.KittyConnectionError, "Invalid window listing"):
+                    driver._windows()
 
 
 class TtyDiscovery(unittest.TestCase):

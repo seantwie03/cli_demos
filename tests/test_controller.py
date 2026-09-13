@@ -1,5 +1,8 @@
 import importlib.util
 import io
+import os
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -169,3 +172,31 @@ class Playback(unittest.TestCase):
                 release.assert_called_once()
                 title.assert_called_once()
                 teardown.assert_not_called()
+
+
+class ConnectionStartup(unittest.TestCase):
+    def test_connection_failure_stops_before_claim_or_launch(self):
+        source = Path(__file__).resolve().parents[1] / "sample_command_file.sh"
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            driver, "CONTROLLER_PID", Path(directory) / "controller.pid"
+        ), patch.dict(os.environ, {"KITTY_LISTEN_ON": "unix:/missing"}), patch.object(
+            driver, "kitty", side_effect=subprocess.CalledProcessError(
+                1, ["kitty"], stderr="Connection refused"
+            )
+        ) as remote, patch.object(driver, "launch") as launch, patch.object(
+            driver, "claim_controller_window"
+        ) as title, patch.object(cli.sys, "stderr", io.StringIO()) as stderr:
+            self.assertEqual(cli.main([str(source)]), 1)
+            self.assertFalse(driver.CONTROLLER_PID.exists())
+            launch.assert_not_called()
+            title.assert_not_called()
+            remote.assert_called_once_with("ls")
+            self.assertIn("unix:/missing", stderr.getvalue())
+            self.assertIn("Connection refused", stderr.getvalue())
+            self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_check_needs_no_kitty(self):
+        source = Path(__file__).resolve().parents[1] / "sample_command_file.sh"
+        with patch.object(driver, "kitty") as remote, patch.object(cli.sys, "stdout", io.StringIO()):
+            self.assertEqual(cli.main(["--check", str(source)]), 0)
+            remote.assert_not_called()
