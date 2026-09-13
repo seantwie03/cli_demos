@@ -37,6 +37,7 @@ from pathlib import Path
 
 from .engine import SENTINEL, Step
 from .placement import Placement
+from .recorder import SHUTDOWN_BUDGET
 
 TITLE = "Presentation"
 MATCH = f"title:^{TITLE}$"
@@ -83,6 +84,10 @@ def _windows() -> list[dict]:
         listing = kitty("ls")
     except OSError as error:
         raise KittyConnectionError(f"Could not invoke kitty for {target}: {error}") from error
+    except subprocess.TimeoutExpired as error:
+        raise KittyConnectionError(
+            f"Timed out after {error.timeout}s reaching {target}"
+        ) from error
     except subprocess.CalledProcessError as error:
         detail = (error.stderr or "").strip() or f"exit status {error.returncode}"
         raise KittyConnectionError(f"Could not reach {target}: {detail}") from error
@@ -164,12 +169,25 @@ class Session:
     window_id: int | None = None
     app_id: str = ""
     control: Path | None = None
+    stopped_at: float | None = None
 
     @property
     def match(self) -> str:
         if self.window_id is None:
             raise RuntimeError("Presentation window identity is unavailable")
         return f"id:{self.window_id}"
+
+    def request_stop(self) -> None:
+        """Ask the supervisor to stop, starting the shared shutdown clock once."""
+        if self.stopped_at is None:
+            (self.control / "stop").touch()
+            self.stopped_at = time.monotonic()
+
+    def shutdown_left(self) -> float:
+        """What is left of the recorder's own shutdown budget."""
+        if self.stopped_at is None:
+            return SHUTDOWN_BUDGET
+        return max(0.0, SHUTDOWN_BUDGET - (time.monotonic() - self.stopped_at))
 
     def receipt(self):
         if self.control and (self.control / "finished").exists():
@@ -181,18 +199,39 @@ class Session:
         if self.control and receipt is not None:
             raise RecordingError(f"Recorder exited before playback/finalization completed: {receipt}")
 
+    def present(self):
+        """Whether Kitty lists the owned window; None when it could not answer.
+
+        A failed listing is not evidence the Presentation is gone, so callers
+        using this as a safety net must never read None as absence.
+        """
+        try:
+            return any(window.get("id") == self.window_id for window in _windows())
+        except KittyConnectionError as error:
+            print(f"warning: could not check the Presentation: {error}", file=sys.stderr)
+            return None
+
     def wait_file(self, name: str, timeout: float = 10):
         deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
+        listed = 0.0
+        while True:
+            # Check the receipt first and on every pass: it is a stat, and it
+            # must still win when a slow listing has overrun the deadline.
             path = self.control / name
             if path.exists():
                 return json.loads(path.read_text())
             if name != "finished":
                 self.check_recording()
-            if not any(w.get("id") == self.window_id for w in _windows()):
-                raise RecordingError(f"Presentation closed while waiting for recorder {name}")
+            now = time.monotonic()
+            if now >= deadline:
+                raise RecordingError(f"Timed out waiting for recorder {name}")
+            # A listing costs a Kitty round-trip; the receipt does not. Poll the
+            # expensive check about once a second so it cannot dominate the loop.
+            if now - listed >= 1:
+                listed = now
+                if self.present() is False:
+                    raise RecordingError(f"Presentation closed while waiting for recorder {name}")
             time.sleep(.1)
-        raise RecordingError(f"Timed out waiting for recorder {name}")
 
     def close_window(self):
         # If the launch reply was lost, recover only this run's unique marker.
@@ -209,7 +248,8 @@ class Session:
         while any(w.get("id") == self.window_id for w in _windows()):
             if time.monotonic() >= deadline:
                 raise RecordingError("Presentation did not close")
-            time.sleep(.1)
+            # Each pass is a Kitty round-trip; closure does not need 10Hz.
+            time.sleep(.25)
 
     def dispose(self):
         if self.control:
@@ -218,11 +258,12 @@ class Session:
 
     def abort(self):
         if self.control:
-            (self.control / "stop").touch()
+            self.request_stop()
             # Before start the supervisor has no child and can just be closed.
             if (self.control / "start").exists() and self.receipt() is None:
                 try:
-                    self.wait_file("finished", 15)
+                    # Only what stop_recording left unspent; never a fresh budget.
+                    self.wait_file("finished", self.shutdown_left())
                 except Exception as error:
                     print(f"warning: recorder cleanup: {error}; state retained at {self.control}", file=sys.stderr)
                     self.close_window()
@@ -456,9 +497,11 @@ def release_controller_window() -> None:
 def stop_recording(session: Session) -> None:
     """End the recorded shell, wait for asciinema, then close the owned window."""
     session.check_recording()
-    (session.control / "stop").touch()
-    receipt = session.wait_file("finished", 15)
-    if (receipt.get("returncode") != 0 or receipt.get("requested") is not True
+    session.request_stop()
+    receipt = session.wait_file("finished", session.shutdown_left())
+    # "source" must be our own stop file: a signal-driven stop means the window
+    # was closed under us, and that recording is truncated, not finished.
+    if (receipt.get("returncode") != 0 or receipt.get("source") != "stop-file"
             or receipt.get("forced") is not False or receipt.get("error")):
         raise RecordingError(f"Recorder did not finalize successfully: {receipt}")
     session.close_window()

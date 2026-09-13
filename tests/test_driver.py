@@ -42,7 +42,8 @@ class RemoteControl(unittest.TestCase):
     def test_failed_or_invalid_listing_never_looks_empty(self):
         errors = [FileNotFoundError("kitty missing"),
                   subprocess.CalledProcessError(1, ["kitty"], stderr="Permission denied"),
-                  subprocess.CalledProcessError(1, ["kitty"], stderr="Connection refused")]
+                  subprocess.CalledProcessError(1, ["kitty"], stderr="Connection refused"),
+                  subprocess.TimeoutExpired(["kitty"], 5)]
         for error in errors:
             with self.subTest(error=error), patch.dict(os.environ, {"KITTY_LISTEN_ON": "unix:/missing"}), patch.object(driver, "kitty", side_effect=error) as invoke:
                 with self.assertRaisesRegex(driver.KittyConnectionError, "unix:/missing"):

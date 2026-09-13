@@ -8,7 +8,7 @@ const verification = new QTimer();
 verification.interval = 50;
 const expiry = new QTimer();
 expiry.singleShot = true;
-expiry.interval = 8000;
+expiry.interval = config.expiry;
 function stop() {
     if (stopped) return;
     stopped = true;

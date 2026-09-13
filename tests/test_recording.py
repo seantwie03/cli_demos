@@ -102,8 +102,10 @@ class Publication(unittest.TestCase):
 
 class Finalization(unittest.TestCase):
     def test_bad_receipts_and_close_failure_prevent_success(self):
-        good = dict(returncode=0, requested=True, forced=False, error=None)
-        for changes in ({"returncode": 7}, {"requested": False}, {"forced": True}, {"error": "failed"}, {}):
+        good = dict(returncode=0, source="stop-file", forced=False, error=None)
+        # A signal source means the window was closed under us, not a clean stop.
+        for changes in ({"returncode": 7}, {"source": "SIGHUP"}, {"source": None},
+                        {"forced": True}, {"error": "failed"}, {}):
             with self.subTest(changes=changes), tempfile.TemporaryDirectory() as directory:
                 session = driver.Session(window_id=7, control=Path(directory))
                 with patch.object(session, "wait_file", return_value=good | changes), patch.object(
@@ -170,11 +172,12 @@ class RealRecorder(unittest.TestCase):
                 (control / "stop").touch()
                 self.wait_file(control / "finished", master, timeout=16)
                 receipt = json.loads((control / "finished").read_text())
-                self.assertEqual(receipt, dict(returncode=0, requested=True, forced=False, error=None))
+                self.assertEqual(receipt, dict(returncode=0, source="stop-file", forced=False, error=None))
                 lines = [json.loads(line) for line in cast.read_text().splitlines() if line]
                 self.assertEqual(lines[0]["term"]["cols"], 120)
                 self.assertIn(marker, "".join(event[2] for event in lines[1:] if event[1] == "o"))
-                (control / "release").touch()
+                # Publishing the receipt is the supervisor's last act: it exits
+                # on its own, which is what closes the Presentation window.
                 deadline = time.monotonic() + 3
                 while time.monotonic() < deadline:
                     done, status = os.waitpid(pid, os.WNOHANG)
@@ -203,6 +206,116 @@ class RealRecorder(unittest.TestCase):
         self.fail(f"Timed out waiting for {path.name}")
 
 
+class WaitingForTheRecorder(unittest.TestCase):
+    """The window listing is a safety net, never a veto or the dominant cost."""
+
+    def test_receipt_wins_over_a_listing_that_overran_the_deadline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            control = Path(directory)
+            session = driver.Session(window_id=7, control=control)
+
+            def slow():
+                # The recorder finishes while we are blocked in `kitty @ ls`.
+                (control / "finished").write_text('{"returncode": 0}')
+                time.sleep(.3)
+                return [{"id": 7}]
+
+            with patch.object(driver, "_windows", side_effect=slow):
+                self.assertEqual(session.wait_file("finished", timeout=.1), {"returncode": 0})
+
+    def test_listing_is_throttled_far_below_the_receipt_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = driver.Session(window_id=7, control=Path(directory))
+            calls = []
+            with patch.object(driver, "_windows", side_effect=lambda: calls.append(1) or [{"id": 7}]):
+                with self.assertRaisesRegex(driver.RecordingError, "Timed out"):
+                    session.wait_file("finished", timeout=1.1)
+            self.assertLessEqual(len(calls), 3)  # ~11 polls happened
+
+    def test_unreachable_kitty_never_fails_a_recording_on_its_own(self):
+        with tempfile.TemporaryDirectory() as directory:
+            control = Path(directory)
+            session = driver.Session(window_id=7, control=control)
+            state = {"n": 0}
+
+            def blip():
+                state["n"] += 1
+                if state["n"] == 1:
+                    raise driver.KittyConnectionError("transient: kitty busy")
+                (control / "finished").write_text('{"returncode": 0}')
+                return [{"id": 7}]
+
+            with patch.object(driver, "_windows", side_effect=blip), redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(session.wait_file("finished", timeout=5), {"returncode": 0})
+            self.assertIn("could not check the Presentation", err.getvalue())
+
+    def test_a_genuinely_absent_window_still_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = driver.Session(window_id=7, control=Path(directory))
+            with patch.object(driver, "_windows", return_value=[{"id": 8}]):
+                with self.assertRaisesRegex(driver.RecordingError, "Presentation closed"):
+                    session.wait_file("finished", timeout=5)
+
+    def test_a_signal_stop_is_not_reported_as_a_requested_one(self):
+        """Closing the Presentation SIGHUPs the supervisor; that is not a stop
+        we asked for, and its truncated cast must never be published."""
+        from kittydemo import recorder
+        with tempfile.TemporaryDirectory() as directory:
+            control = Path(directory)
+            (control / "start").touch()          # started, but no stop file
+            process = Mock()
+            process.poll.side_effect = [None, None, 0]   # exit right after the signal
+            process.wait.return_value = 0
+            handlers = {}
+            with patch.object(recorder.signal, "signal", lambda sig, fn: handlers.setdefault(sig, fn)), \
+                 patch.object(recorder.subprocess, "Popen", return_value=process), \
+                 patch.object(recorder.time, "sleep",
+                              side_effect=lambda _: handlers[recorder.signal.SIGHUP](
+                                  recorder.signal.SIGHUP, None)):
+                recorder.supervise(control, control / "out.cast")
+            receipt = json.loads((control / "finished").read_text())
+            self.assertEqual(receipt["source"], "SIGHUP")
+            session = driver.Session(window_id=7, control=control / "judged")
+            (control / "judged").mkdir()
+            with patch.object(session, "wait_file", return_value=receipt), patch.object(
+                session, "close_window"
+            ) as close:
+                with self.assertRaisesRegex(driver.RecordingError, "did not finalize"):
+                    driver.stop_recording(session)
+                close.assert_not_called()
+
+    def test_abort_uses_only_the_unspent_shutdown_budget(self):
+        from kittydemo import recorder
+        with tempfile.TemporaryDirectory() as directory:
+            control = Path(directory)
+            (control / "start").touch()
+            session = driver.Session(window_id=7, control=control)
+            waits = []
+
+            def spent(name, timeout=10):
+                waits.append(timeout)
+                session.stopped_at -= recorder.SHUTDOWN_BUDGET  # burn the whole budget
+                raise driver.RecordingError(f"Timed out waiting for recorder {name}")
+
+            with patch.object(session, "wait_file", side_effect=spent), patch.object(
+                session, "close_window"
+            ), redirect_stderr(io.StringIO()):
+                with self.assertRaises(driver.RecordingError):
+                    driver.stop_recording(session)
+                session.abort()
+            # The first wait is the budget less the moment already elapsed since
+            # the stop request; the second must get nothing left to spend.
+            self.assertEqual(len(waits), 2)
+            self.assertAlmostEqual(waits[0], recorder.SHUTDOWN_BUDGET, places=1)
+            self.assertEqual(waits[1], 0)
+
+    def test_controller_budget_covers_the_recorder_worst_case(self):
+        from kittydemo import recorder
+        self.assertGreater(
+            recorder.SHUTDOWN_BUDGET, recorder.GRACEFUL_STOP + recorder.TERMINATE_WAIT
+        )
+
+
 class SupervisorFailure(unittest.TestCase):
     def test_missing_recorder_and_forced_shutdown_cannot_report_success(self):
         from kittydemo import recorder
@@ -211,7 +324,6 @@ class SupervisorFailure(unittest.TestCase):
                 control = Path(directory)
                 (control / "start").touch()
                 (control / "stop").touch()
-                (control / "release").touch()
                 process = Mock()
                 process.poll.return_value = None
                 process.wait.side_effect = [subprocess.TimeoutExpired("asciinema", 2), -9] if mode == "forced" else None
@@ -219,10 +331,24 @@ class SupervisorFailure(unittest.TestCase):
                     recorder.subprocess, "Popen", side_effect=FileNotFoundError("asciinema missing") if mode == "missing" else None,
                     return_value=process
                 ), patch.object(recorder.time, "monotonic", side_effect=iter(range(0, 100, 5))), patch.object(recorder.time, "sleep"):
-                    self.assertEqual(recorder.supervise(control, control / "out.cast"), 1)
+                    recorder.supervise(control, control / "out.cast")
                 receipt = json.loads((control / "finished").read_text())
                 self.assertTrue(receipt["forced"])
+                # "missing" fails before the stop is ever processed, so it has no
+                # source; "forced" saw our stop file and still had to be killed.
+                self.assertEqual(receipt["source"], "stop-file" if mode == "forced" else None)
                 self.assertNotEqual(receipt["returncode"], 0)
+                # The receipt, not an exit status, is what the controller judges.
+                # A clean control dir keeps check_recording() from firing first.
+                judged = control / "judged"
+                judged.mkdir()
+                session = driver.Session(window_id=7, control=judged)
+                with patch.object(session, "wait_file", return_value=receipt), patch.object(
+                    session, "close_window"
+                ) as close:
+                    with self.assertRaisesRegex(driver.RecordingError, "did not finalize"):
+                        driver.stop_recording(session)
+                    close.assert_not_called()
                 if mode == "forced":
                     process.kill.assert_called_once()
                     self.assertEqual(process.wait.call_count, 2)

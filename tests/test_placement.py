@@ -114,11 +114,12 @@ class QTimer { constructor() { this.timeout = signal(); this.active = false; tim
  start() { this.active = true; } stop() { this.active = false; } }
 const acknowledgements = [];
 function callDBus(...args) { acknowledgements.push(args[4]); }
-const config = {appId:'owned',ready:'ready',done:'done'};
+const config = {appId:'owned',ready:'ready',done:'done',expiry:EXPIRY};
 const workspace = {screens: INPUT.map(name => ({name})), activeWindow: {output:{name:ORIGIN}},
  windowAdded: signal(), windowRemoved: signal(),
  sendClientToScreen: (window, output) => { window.output = output; } };
-'''.replace("INPUT", json.dumps(outputs)).replace("ORIGIN", json.dumps(origin))
+'''.replace("INPUT", json.dumps(outputs)).replace("ORIGIN", json.dumps(origin)).replace(
+                "EXPIRY", json.dumps(int(placement.SCRIPT_EXPIRY * 1000)))
             checks = '''
 assert.deepEqual(acknowledgements, ['ready']);
 workspace.activeWindow = {output:{name:'changed-focus'}};
@@ -139,7 +140,7 @@ assert.equal(second.output, undefined);
             with self.subTest(outputs=outputs):
                 subprocess.run(["node", "-e", harness + source + checks], check=True, capture_output=True, text=True)
             expired = '''
-timers.filter(t => t.interval === 8000).forEach(t => t.timeout.emit());
+timers.filter(t => t.interval === config.expiry).forEach(t => t.timeout.emit());
 const window = {resourceClass:'owned'};
 workspace.windowAdded.emit(window);
 assert.equal(window.output, undefined);

@@ -14,6 +14,14 @@ import subprocess
 import sys
 import time
 
+#: Seconds a stop request gives the recorded shell to exit on its own.
+GRACEFUL_STOP = 10
+#: Seconds SIGTERM gets before SIGKILL, once the graceful deadline passes.
+TERMINATE_WAIT = 2
+#: Worst case before a receipt is published either way, plus slack for the
+#: 0.05s poll and the publish itself. Controllers must wait at least this long.
+SHUTDOWN_BUDGET = GRACEFUL_STOP + TERMINATE_WAIT + 3
+
 
 def publish(directory: Path, name: str, value) -> None:
     pending = directory / (name + ".pending")
@@ -22,11 +30,11 @@ def publish(directory: Path, name: str, value) -> None:
 
 
 def supervise(directory: Path, cast: Path) -> int:
-    interrupted = False
+    interrupted = 0
 
-    def interrupt(*_):
+    def interrupt(signum, *_):
         nonlocal interrupted
-        interrupted = True
+        interrupted = signum
 
     for sig in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, interrupt)
@@ -39,10 +47,15 @@ def supervise(directory: Path, cast: Path) -> int:
 
     process = None
     shell_fd = None
-    requested = forced = False
+    forced = False
+    source = None
     error = None
     try:
         command = shlex.join([sys.executable, str(Path(__file__).resolve()), "shell", str(directory)])
+        # No --return, deliberately: asciinema must exit on its own merits so a
+        # zero status means "the cast was finalized". With --return it would
+        # inherit the recorded shell's status, and a SIGHUP'd bash exits 129,
+        # which would report every successful recording as a failure.
         process = subprocess.Popen([
             "asciinema", "rec", str(cast), "--overwrite", "--window-size", "120x24",
             "--command", command,
@@ -56,8 +69,12 @@ def supervise(directory: Path, cast: Path) -> int:
                 publish(directory, "running", True)
             if interrupted or (directory / "stop").exists():
                 if stop_deadline is None:
-                    requested = True
-                    stop_deadline = time.monotonic() + 10
+                    # Say WHY we are stopping. A signal here means the
+                    # Presentation was closed, which truncates the recording;
+                    # only a controller stop may go on to publish a cast.
+                    source = ("stop-file" if (directory / "stop").exists()
+                              else signal.Signals(interrupted).name)
+                    stop_deadline = time.monotonic() + GRACEFUL_STOP
                 if shell_fd is not None:
                     try:
                         signal.pidfd_send_signal(shell_fd, signal.SIGHUP)
@@ -71,7 +88,7 @@ def supervise(directory: Path, cast: Path) -> int:
                     forced = True
                     process.terminate()
                     try:
-                        process.wait(timeout=2)
+                        process.wait(timeout=TERMINATE_WAIT)
                     except subprocess.TimeoutExpired:
                         process.kill()
                     break
@@ -87,12 +104,11 @@ def supervise(directory: Path, cast: Path) -> int:
     finally:
         if shell_fd is not None:
             os.close(shell_fd)
-    publish(directory, "finished", dict(returncode=returncode, requested=requested,
+    publish(directory, "finished", dict(returncode=returncode, source=source,
                                         forced=forced, error=error))
-    deadline = time.monotonic() + 20
-    while not interrupted and not (directory / "release").exists() and time.monotonic() < deadline:
-        time.sleep(.05)
-    return 0 if returncode == 0 and requested and not forced else 1
+    # The receipt is the verdict; this exit status goes to Kitty and is discarded.
+    # Returning closes the Presentation, which the controller then verifies.
+    return 0
 
 
 def main() -> int:

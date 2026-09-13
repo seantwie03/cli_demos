@@ -12,6 +12,12 @@ import time
 
 
 TIMEOUT = 8.0
+#: The compositor script's own expiry. Its clock starts when the script loads,
+#: before the window exists, while TIMEOUT only starts once it does -- so this
+#: must comfortably outlive TIMEOUT plus however long window creation takes.
+#: Matching is by unique per-run app id, so a long expiry cannot catch a later
+#: run's window; it exists only to clean up if the controller dies.
+SCRIPT_EXPIRY = TIMEOUT * 3
 
 
 def warn(error) -> None:
@@ -70,7 +76,8 @@ class KDE:
         self.load(self.ready, "// readiness marker\n")
         self.load(self.done, "// completion marker\n")
         source = (Path(__file__).with_name("placement.js")).read_text()
-        source = "const config = " + json.dumps(dict(appId=self.app_id, ready=self.ready, done=self.done)) + ";\n" + source
+        source = "const config = " + json.dumps(dict(appId=self.app_id, ready=self.ready, done=self.done,
+                                expiry=int(SCRIPT_EXPIRY * 1000))) + ";\n" + source
         number = self.load(self.app_id, source)
         dbus("org.kde.kwin.Script.run", path=f"/Scripting/Script{number}")
         self.wait_removed(self.ready)
@@ -84,6 +91,8 @@ class KDE:
                 try:
                     dbus("org.kde.kwin.Scripting.unloadScript", name)
                 except Exception as error:
+                    # Keep every unload attempt independent: close() runs from
+                    # Placement.__exit__, where an escaping error is noise at best.
                     warn(f"could not unload {name}: {error}")
         finally:
             self.directory.cleanup()
@@ -145,4 +154,10 @@ class Placement:
 
     def __exit__(self, *_):
         if self.backend:
-            self.backend.close()
+            # Placement is best-effort and must never decide the launch outcome:
+            # raising here would replace the caller's in-flight error, or abort a
+            # session that started fine. Ctrl-C still propagates, as it should.
+            try:
+                self.backend.close()
+            except Exception as error:
+                warn(error)
