@@ -242,6 +242,8 @@ def parse(source: str) -> list[Step]:
         if role == "directive":
             name, argument = _parse_directive(text, number)
             if name == "noenter":
+                if argument:
+                    raise CommandFileError(f"line {number}: noenter takes no arguments")
                 pending.noenter = True
                 pending.noenter_line = number
             elif name == "key":
@@ -290,11 +292,11 @@ def parse(source: str) -> list[Step]:
             continue
 
         if pending.noenter:
-            emit(Step(kind="send", text=body, pause=pending.pause, line=number))
+            emit(Step(kind="send", text=text, pause=pending.pause, line=number))
         else:
-            emit(Step(kind="arm", text=body, line=number))
+            emit(Step(kind="arm", text=text, line=number))
             steps.append(
-                Step(kind="run", text=body, pause=pending.pause, line=number)
+                Step(kind="run", text=text, pause=pending.pause, line=number)
             )
         pending.reset()
         index += 1

@@ -27,8 +27,18 @@ class CommandSteps(unittest.TestCase):
         self.assertEqual(parse("")[-1].kind, "end")
         self.assertEqual(parse("ls\n")[-1].kind, "end")
 
-    def test_indentation_does_not_change_meaning(self):
-        self.assertEqual(sequence("    ls -l\n"), sequence("ls -l\n"))
+    def test_command_whitespace_is_preserved_in_both_phases(self):
+        for text in ("    size 1k", "\trotate 2", "    # config comment", "  text  "):
+            with self.subTest(text=text):
+                self.assertEqual(
+                    sequence(text + "\n")[:2], [("arm", text), ("run", text)]
+                )
+
+    def test_indented_noenter_directive_preserves_command_whitespace(self):
+        self.assertEqual(
+            sequence("  #@ noenter\n    }\n"),
+            [("send", "    }"), ("end", SENTINEL)],
+        )
 
 
 class Notes(unittest.TestCase):
@@ -371,6 +381,15 @@ class NoEnterBinding(unittest.TestCase):
 
     def test_noenter_makes_a_command_a_single_send(self):
         self.assertEqual(parse("#@ noenter\nq\n")[0].kind, "send")
+
+    def test_noenter_arguments_are_refused(self):
+        with self.assertRaisesRegex(
+            CommandFileError, r"^line 2: noenter takes no arguments$"
+        ):
+            parse("pwd\n#@ noenter unexpected\nq\n")
+
+    def test_noenter_allows_trailing_whitespace(self):
+        self.assertEqual(parse("#@ noenter \t\nq\n")[0].kind, "send")
 
     def test_noenter_before_a_header_is_refused(self):
         with self.assertRaises(CommandFileError):

@@ -44,8 +44,11 @@ class KeySteps(unittest.TestCase):
             for step in steps[:-1]:
                 driver.perform(driver.Session(window_id=7), step)
         self.assertEqual(
-            [c.args[0][2:] for c in run.call_args_list],
-            [[command, '--match', "id:7", '--', value] for command, value in (
+            [(c.args[0][2:], c.kwargs['input']) for c in run.call_args_list],
+            [([command, '--match', 'id:7', '--stdin'], value)
+             if command == 'send-text' else
+             ([command, '--match', 'id:7', '--', value], None)
+             for command, value in (
                 ('send-text', 'nano demo.txt'), ('send-key', 'enter'),
                 ('send-text', 'A note for this demonstration.'), ('send-key', 'enter'),
                 ('send-key', 'ctrl+x'), ('send-text', 'y'), ('send-key', 'enter'),
@@ -57,7 +60,7 @@ class KeySteps(unittest.TestCase):
             driver.perform(driver.Session(window_id=7), parse('#@ key --help\n')[0])
         run.assert_called_once_with(
             ['kitty', '@', 'send-key', '--match', "id:7", '--', '--help'],
-            check=True, capture_output=True, text=True, timeout=5,
+            check=True, capture_output=True, text=True, timeout=5, input=None,
         )
 
     def test_navigation_and_hud_do_not_deliver_keys(self):

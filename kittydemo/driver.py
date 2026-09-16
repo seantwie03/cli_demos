@@ -65,9 +65,10 @@ class KittyConnectionError(RuntimeError):
     """Kitty could not provide a usable remote-control response."""
 
 
-def kitty(*arguments: str, check: bool = True) -> subprocess.CompletedProcess:
+def kitty(*arguments: str, check: bool = True, input: str | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["kitty", "@", *arguments], check=check, capture_output=True, text=True, timeout=5
+        ["kitty", "@", *arguments], check=check, capture_output=True, text=True, timeout=5,
+        input=input,
     )
 
 
@@ -373,7 +374,8 @@ def launch(record: bool, cast: Path | None) -> Session:
 
 
 def send_text(text: str, *, match: str = MATCH) -> None:
-    kitty("send-text", "--match", match, "--", text)
+    """Send literal text without Kitty interpreting backslash escapes."""
+    kitty("send-text", "--match", match, "--stdin", input=text)
 
 
 def send_key(key: str, *, match: str = MATCH) -> None:

@@ -250,6 +250,12 @@ i
 
 Use `#!` for a comment the audience should not see.
 
+Command text is sent literally: backslash sequences such as `\n` and `\t`
+are preserved for the receiving shell or editor to interpret. Leading spaces
+and tabs are also preserved, including indentation in editor content and
+`noenter` lines. Use `#@ key`
+for special keys rather than escaped control codes in command text.
+
 
 ### Directives
 

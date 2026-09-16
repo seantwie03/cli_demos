@@ -1,8 +1,10 @@
 """PTY selection without controlling any existing Kitty windows."""
 
+import json
 import os
 import pty
 import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import ExitStack
@@ -10,9 +12,75 @@ from pathlib import Path
 from unittest.mock import patch
 
 from kittydemo import driver
+from kittydemo.engine import parse
 
 
 class RemoteControl(unittest.TestCase):
+    def test_text_payload_reaches_child_stdin_verbatim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "kitty"
+            executable.write_text(
+                f"#!{sys.executable}\n"
+                "import json, sys\n"
+                "print(json.dumps([sys.argv[1:], sys.stdin.buffer.read().hex()]))\n"
+            )
+            executable.chmod(0o700)
+            payloads = (
+                r"printf '%s\n' hello",
+                r"\t\r\x03\e\u21fa\\",
+                "  café\ttext\r\n  ",
+                "--help",
+                "",
+            )
+            with patch.dict(os.environ, {"PATH": directory}):
+                original = driver.kitty
+                for payload in payloads:
+                    with self.subTest(payload=payload), patch.object(
+                        driver, "kitty", wraps=original
+                    ) as invoke:
+                        results = []
+                        invoke.side_effect = lambda *args, **kwargs: results.append(original(*args, **kwargs))
+                        driver.send_text(payload, match="id:7")
+                        arguments, received = json.loads(results[0].stdout)
+                        self.assertEqual(arguments, ["@", "send-text", "--match", "id:7", "--stdin"])
+                        self.assertEqual(bytes.fromhex(received), payload.encode("utf-8"))
+
+    def test_type_and_noenter_steps_use_literal_text_without_enter(self):
+        payload = r"printf '%s\n' hello"
+        for prefix in ("", "#@ noenter\n"):
+            with self.subTest(prefix=prefix), patch.object(driver, "kitty") as invoke:
+                driver.perform(driver.Session(window_id=7), parse(prefix + payload)[0])
+                invoke.assert_called_once_with(
+                    "send-text", "--match", "id:7", "--stdin", input=payload
+                )
+
+    def test_vim_logrotate_block_preserves_indentation_through_playback(self):
+        source = (
+            "vim /etc/logrotate.d/demo\n"
+            "i/var/log/demo.log {\n"
+            "    size 1k\n"
+            "    rotate 2\n"
+            "    compress\n"
+            "    missingok\n"
+            "#@ noenter\n}\n#@ key escape\n:wq\n"
+        )
+        with patch.object(driver.subprocess, "run") as run:
+            for step in parse(source)[:-1]:
+                driver.perform(driver.Session(window_id=7), step)
+        delivered = []
+        for call in run.call_args_list:
+            args = call.args[0]
+            if args[2] == "send-text":
+                self.assertIn("--stdin", args)
+                delivered.append(call.kwargs["input"])
+            else:
+                delivered.append({"enter": "\r", "escape": "\x1b"}[args[-1]])
+        self.assertEqual("".join(delivered),
+                         "vim /etc/logrotate.d/demo\r"
+                         "i/var/log/demo.log {\r"
+                         "    size 1k\r    rotate 2\r    compress\r    missingok\r"
+                         "}\x1b:wq\r")
+
     def test_send_commands_inherit_endpoint_without_transport_override(self):
         with tempfile.TemporaryDirectory() as directory:
             executable = Path(directory) / "kitty"
@@ -27,7 +95,7 @@ class RemoteControl(unittest.TestCase):
                     with patch.object(driver, "kitty") as invoke:
                         # Capture the actual child's response through the real wrapper.
                         results = []
-                        invoke.side_effect = lambda *args: results.append(original(*args))
+                        invoke.side_effect = lambda *args, **kwargs: results.append(original(*args, **kwargs))
                         driver.send_key("enter")
                         driver.send_text("hello")
                     for result, command in zip(results, ("send-key", "send-text")):

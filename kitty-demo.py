@@ -45,6 +45,7 @@ def play(options, path: Path, steps, session: driver.Session) -> None:
     """Play sequentially, with selection and note scrolling in live mode."""
     cursor = Cursor(steps)
     scroll = 0
+    pending_pause = None
     started = time.monotonic()
     terminal = sys.stdout.isatty()
     try:
@@ -65,6 +66,9 @@ def play(options, path: Path, steps, session: driver.Session) -> None:
                 sys.stdout.flush()
                 scroll = frame.scroll
                 if options.record:
+                    if pending_pause is not None:
+                        time.sleep(pending_pause)
+                        pending_pause = None
                     session.check_recording()
                     if cursor.finished:
                         time.sleep(options.pause)
@@ -88,9 +92,8 @@ def play(options, path: Path, steps, session: driver.Session) -> None:
                     cursor.advanced()
                     scroll = 0
                     if options.record:
-                        time.sleep(
-                            step.pause if step.pause is not None else options.pause
-                        )
+                        # Redraw the next action before holding after this one.
+                        pending_pause = step.pause if step.pause is not None else options.pause
     finally:
         if terminal:
             sys.stdout.write("\033[?25h\033[?1049l")

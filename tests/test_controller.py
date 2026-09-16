@@ -109,6 +109,45 @@ class Playback(unittest.TestCase):
         )
         self.assertEqual([s.kind for s in performed], ["arm", "arm", "run", "end"])
 
+    def test_record_labels_are_current_during_each_pause(self):
+        steps = parse("pwd\n#^ Section\n#@ noenter\nq\n#@ key ctrl+x\n")
+        frames = []
+        output = io.StringIO()
+        with patch.object(driver, "perform"), patch.object(
+            cli.time, "sleep", side_effect=lambda _: frames.append(
+                output.getvalue().rsplit(hud.CLEAR, 1)[-1]
+            )
+        ), patch.object(cli.sys, "stdout", output):
+            cli.play(SimpleNamespace(record=True, pause=3), Path("demo.sh"),
+                     steps, driver.Session(window_id=7))
+        self.assertEqual(len(frames), len(steps) + 1)
+        for frame, label in zip(frames, ("[ENTER]", "[SHOW]", "[SEND]", "[KEY]", "[END]")):
+            self.assertIn(label, frame)
+            for other in ("[TYPE]", "[ENTER]", "[SHOW]", "[SEND]", "[KEY]", "[END]"):
+                if other != label:
+                    self.assertNotIn(other, frame)
+        for frame in frames[-2:]:
+            self.assertIn("Playback complete. Finalizing recording", frame)
+
+    def test_live_redraws_before_waiting_for_next_request(self):
+        output = io.StringIO()
+        frames = []
+
+        def advance():
+            frames.append(output.getvalue().rsplit(hud.CLEAR, 1)[-1])
+            return "advance"
+
+        with patch.object(driver, "Requests") as reader, patch.object(
+            driver, "perform"
+        ), patch.object(cli.sys, "stdout", output), patch.object(cli.time, "sleep") as sleep:
+            reader.return_value.__enter__.return_value.wait.side_effect = advance
+            cli.play(SimpleNamespace(record=False, pause=3), Path("demo.sh"),
+                     parse("pwd\n"), driver.Session(window_id=7))
+        self.assertEqual(len(frames), 4)
+        for frame, label in zip(frames, ("[TYPE]", "[ENTER]", "[END]", "Demo complete.")):
+            self.assertIn(label, frame)
+        sleep.assert_not_called()
+
     def test_navigation_resize_and_scroll_never_perform(self):
         performed, _, _, _ = self.play(
             "pwd\nclear\n#^ Section\n",
