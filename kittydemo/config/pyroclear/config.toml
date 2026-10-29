@@ -1,0 +1,23 @@
+# pyroclear settings for live-mode section transitions; see burn() in
+# kittydemo/driver.py, which points XDG_CONFIG_HOME at kittydemo/config.
+# pyroclear reads these only from a config file, so kitty-demo carries its own
+# rather than depending on the presenter's ~/.config/pyroclear.
+#
+# The palette is chosen with --random on every burn, so none is set here.
+# pyroclear does not strip a comment that shares a line with a value; the value
+# then fails to parse and is silently ignored, so keep comments on their own
+# lines.
+
+[animation]
+# Screen sharing does not carry 60 fps, so the extra frames would be wasted.
+fps              = 30
+wind             = 0
+# 0 is Low. The presentation font is large, so the terminal has few rows and
+# taller flames engulf the whole screen.
+height           = 0
+# Bottom to top.
+direction        = 0
+# Seconds, an upper bound: the burn ends sooner once the flames die out.
+duration         = 1.3
+# Fraction of the duration during which the bottom row keeps feeding the fire.
+flames_duration  = 0.38

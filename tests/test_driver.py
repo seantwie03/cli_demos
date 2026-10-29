@@ -199,6 +199,93 @@ class LaunchDiscovery(unittest.TestCase):
             driver.launch(True, Path("/tmp/test.cast"))
         self.send_text.assert_not_called()
 
+    def test_live_burns_only_when_pyroclear_is_installed(self):
+        for installed in ("/usr/bin/pyroclear", None):
+            with self.subTest(installed=installed), patch.object(driver.shutil, "which", return_value=installed):
+                self.devices.discard(self.outer)
+                self.assertEqual(driver.launch(False, None).pyroclear, installed)
+
+    def test_record_never_burns_even_with_pyroclear_installed(self):
+        def start_recorder(session, name, *args):
+            if name == "running":
+                self.devices.add(self.inner)
+        self.wait_file.side_effect = start_recorder
+        with patch.object(driver.shutil, "which", return_value="/usr/bin/pyroclear"):
+            session = driver.launch(True, Path("/tmp/test.cast"))
+        self.addCleanup(session.dispose)
+        self.assertIsNone(session.pyroclear)
+
+
+class SectionTransitions(unittest.TestCase):
+    """A merged clear burns the screen away in live mode when it can."""
+
+    def setUp(self):
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        descriptor, name = tempfile.mkstemp()
+        os.close(descriptor)
+        self.addCleanup(os.unlink, name)
+        self.terminal = Path(name)
+        self.send_text = self.stack.enter_context(patch.object(driver, "send_text"))
+        self.stack.enter_context(patch.object(driver, "send_key"))
+        self.stack.enter_context(patch.object(driver, "draw_header"))
+        self.stack.enter_context(patch.object(driver.time, "sleep"))
+        self.run = self.stack.enter_context(
+            patch.object(driver.subprocess, "run", return_value=subprocess.CompletedProcess([], 0))
+        )
+
+    def perform(self, source, pyroclear="/usr/bin/pyroclear"):
+        session = driver.Session(window_id=7, tty_path=self.terminal, pyroclear=pyroclear)
+        driver.perform(session, parse(source)[0])
+
+    def test_burns_instead_of_clearing(self):
+        self.perform("clear\n#^ Next section\n")
+        self.send_text.assert_not_called()
+        arguments, options = self.run.call_args
+        self.assertEqual(arguments[0], ["/usr/bin/pyroclear", "--random", "--no-save"])
+        self.assertEqual(options["env"]["XDG_CONFIG_HOME"], str(driver.PYROCLEAR_HOME))
+        self.assertEqual(options["stdout"].name, str(self.terminal))
+
+    def test_clears_without_pyroclear(self):
+        self.perform("clear\n#^ Next section\n", pyroclear=None)
+        self.run.assert_not_called()
+        self.send_text.assert_called_once_with("clear", match="id:7")
+
+    def test_header_without_merged_clear_never_burns(self):
+        self.perform("#^ First section\n")
+        self.run.assert_not_called()
+        self.send_text.assert_not_called()
+
+    def test_failed_burn_restores_cursor_and_clears(self):
+        failures = (
+            {"return_value": subprocess.CompletedProcess([], 1)},
+            {"side_effect": subprocess.TimeoutExpired("pyroclear", 5)},
+            {"side_effect": FileNotFoundError("pyroclear")},
+        )
+        for failure in failures:
+            with self.subTest(failure=failure), patch.object(driver.subprocess, "run", **failure):
+                self.terminal.write_text("")
+                self.send_text.reset_mock()
+                self.perform("clear\n#^ Next section\n")
+                self.assertEqual(self.terminal.read_text(), driver.RESET + driver.SHOW_CURSOR)
+                self.send_text.assert_called_once_with("clear", match="id:7")
+
+    def test_settings_are_where_pyroclear_reads_them(self):
+        # pyroclear silently ignores a value it cannot parse, including one
+        # followed by a comment on the same line.
+        settings = (driver.PYROCLEAR_HOME / "pyroclear" / "config.toml").read_text()
+        values = dict(
+            line.split("=", 1) for line in settings.splitlines()
+            if "=" in line and not line.lstrip().startswith("#")
+        )
+        self.assertEqual(
+            {key.strip() for key in values},
+            {"fps", "wind", "height", "direction", "duration", "flames_duration"},
+        )
+        for key, value in values.items():
+            with self.subTest(key=key.strip()):
+                float(value)
+
 
 if __name__ == "__main__":
     unittest.main()

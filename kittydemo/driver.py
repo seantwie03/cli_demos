@@ -45,6 +45,11 @@ CONTROLLER_TITLE = "Controller"
 
 RESET = "\033[0m"
 HEADER_COLOR = "\033[1;34m"
+SHOW_CURSOR = "\033[?25h"
+
+#: XDG_CONFIG_HOME for pyroclear, which reads its animation settings only from
+#: `pyroclear/config.toml` beneath it.
+PYROCLEAR_HOME = Path(__file__).with_name("config")
 
 #: Seconds record mode holds after a step with no explicit `#@ pause`.
 DEFAULT_PAUSE = 3.0
@@ -171,6 +176,9 @@ class Session:
     app_id: str = ""
     control: Path | None = None
     stopped_at: float | None = None
+    #: pyroclear's path in live mode when it is installed; section changes then
+    #: burn the screen away instead of clearing it.
+    pyroclear: str | None = None
 
     @property
     def match(self) -> str:
@@ -321,7 +329,10 @@ def launch(record: bool, cast: Path | None) -> Session:
         raise ValueError("record mode needs an output path")
     if record and (not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal")):
         raise RecordingError("Recording requires Linux pidfds and Python 3.9+")
-    session = Session(app_id="kitty-demo-" + uuid.uuid4().hex)
+    session = Session(
+        app_id="kitty-demo-" + uuid.uuid4().hex,
+        pyroclear=None if record else shutil.which("pyroclear"),
+    )
     try:
         if record:
             session.control = Path(tempfile.mkdtemp(prefix="kitty-demo-record-"))
@@ -409,11 +420,38 @@ def draw_header(session: Session, lines: tuple[str, ...]) -> None:
     send_key("enter", match=session.match)
 
 
+def burn(session: Session) -> bool:
+    """Burn the presentation screen away with pyroclear; False if it did not.
+
+    pyroclear runs locally and writes straight to the presentation terminal,
+    as `draw_header` does, so the remote shell never sees it and nothing needs
+    installing on the host being demonstrated. Record mode never sets
+    `session.pyroclear`, because there the terminal is asciinema's and the
+    fire would land in the cast.
+    """
+    if session.pyroclear is None:
+        return False
+    try:
+        with session.tty_path.open("w") as terminal:
+            burned = subprocess.run(
+                [session.pyroclear, "--random", "--no-save"],
+                stdin=subprocess.DEVNULL, stdout=terminal, stderr=subprocess.DEVNULL,
+                env={**os.environ, "XDG_CONFIG_HOME": str(PYROCLEAR_HOME)},
+                timeout=5,
+            ).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        burned = False
+    if not burned:
+        # A killed or failed burn can leave the cursor hidden mid-frame.
+        session.write(RESET + SHOW_CURSOR)
+    return burned
+
+
 def perform(session: Session, step: Step) -> None:
     """Carry out one press."""
     session.check_recording()
     if step.kind == "header":
-        if step.clears:
+        if step.clears and not burn(session):
             send_text("clear", match=session.match)
             send_key("enter", match=session.match)
             time.sleep(0.2)

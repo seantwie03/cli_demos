@@ -17,6 +17,9 @@ To see a sped up demonstration using this tool check my [Asciinema profile](http
 Requires Linux, [Kitty](https://sw.kovidgoyal.net/kitty/), Python 3.9+, and
 `stty`. The Python package has no third-party dependencies. Recording also
 requires Bash, asciinema 3, and Linux pidfd support (kernel 5.3+).
+[pyroclear](https://github.com/shreyanth-sureshkrishnaa/pyroclear) is optional:
+when it is on your `PATH` (`cargo install pyroclear --locked`), live section
+changes burn the screen away instead of clearing it.
 
 1. Clone this repository, and put `kitty-demo.py` somewhere on your `PATH`:
 
@@ -224,6 +227,16 @@ ls -l
 
 A bare `clear` immediately before a section header is merged into it, so a
 section transition costs one press rather than three.
+
+In live mode with pyroclear installed, that merged `clear` burns the screen away
+instead, in a random palette each time. pyroclear runs locally and writes
+straight to the Presentation terminal, as the header does, so the demonstrated
+host needs nothing installed. Its animation settings live in
+`kittydemo/config/pyroclear/config.toml`, so your own pyroclear configuration is
+neither used nor changed. If pyroclear is missing or fails, the transition falls
+back to a plain `clear`. Record mode always uses the plain `clear`, so the fire
+never appears in a cast. A `clear` that is not merged into a header is typed and
+run as usual.
 
 A `#` line means one of two things, and the line before it decides which. A
 section header claims every `#` line that follows it, however the block is
